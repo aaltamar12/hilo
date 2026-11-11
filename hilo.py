@@ -2368,7 +2368,8 @@ class HiloApp(Gtk.Application):
                 if not all_rows:
                     t.usage = None
                     continue
-                all_rows.sort(key=lambda r: r[0], reverse=True)
+                # Primero lo que está usando CPU (de más a menos); a igual CPU, la RAM.
+                all_rows.sort(key=lambda r: (round(r[1], 1), r[0]), reverse=True)
                 lines = [f"{fmt_mem(r[0]):>8}  {fmt_cpu(r[1]):>6}  {r[2]}" for r in all_rows[:6]]
                 if len(all_rows) > 6:
                     lines.append(f"… y {len(all_rows) - 6} procesos más")

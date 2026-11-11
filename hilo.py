@@ -21,7 +21,8 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Vte", "2.91")
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango, Vte  # noqa: E402
 
-APP_ID = "dev.hilo.Terminal"
+# HILO_APP_ID permite correr una copia de desarrollo al lado de la Hilo instalada.
+APP_ID = os.environ.get("HILO_APP_ID", "dev.hilo.Terminal")
 HOME = os.path.expanduser("~")
 STATE_DIR = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.join(HOME, ".local/state")), "hilo")
 SCROLL_DIR = os.path.join(STATE_DIR, "scroll")

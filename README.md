@@ -88,3 +88,7 @@ Usa la fuente, la paleta y el scrollback del perfil por defecto de GNOME Termina
 - El texto restaurado vuelve sin colores, porque VTE 0.68 solo exporta texto plano.
 - Lo que había en pantalla completa (vim, top) no se guarda como texto. El programa simplemente se vuelve a abrir.
 - Se pierden como mucho los últimos ~2 s de cambios de pestañas y ~10 s de texto.
+
+## Contribuir
+
+Vea [CONTRIBUTING.md](CONTRIBUTING.md): cómo correr una copia de desarrollo sin tocar su sesión, cómo está organizado el código y qué probar antes de proponer un cambio.

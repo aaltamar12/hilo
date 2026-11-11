@@ -60,7 +60,7 @@ Solo se registran las sesiones abiertas desde Hilo, no las de GNOME Terminal. Pa
 
 ## Respuestas de Claude en voz alta
 
-Si [piper](https://github.com/rhasspy/piper) y una voz están instalados en `~/.local/share/piper-tts` (`venv/bin/piper` y un archivo `.onnx`), aparece un botón de parlante en la barra de pestañas. Cada respuesta de Claude Code se lee en voz alta apenas termina, una tras otra si responden varias sesiones a la vez.
+`./install.sh --voz` deja todo listo (piper, una voz en español y el hook de Claude; `VOICE=en_US-amy-medium ./install.sh --voz` para otra). Si [piper](https://github.com/rhasspy/piper) y una voz están instalados en `~/.local/share/piper-tts` (`venv/bin/piper` y un archivo `.onnx`), aparece un botón de parlante en la barra de pestañas. Cada respuesta de Claude Code se lee en voz alta apenas termina, una tras otra si responden varias sesiones a la vez.
 
 - **El botón del parlante** abre un panel con lo que está sonando, anterior / pausa / siguiente / detener, el interruptor para encender o apagar la lectura y el historial: un clic en una respuesta la vuelve a leer.
 - **Ir a la sesión** salta a la pestaña y al panel exactos donde corre esa sesión de Claude, en cualquier ventana de Hilo.
@@ -108,6 +108,7 @@ A los programas a pantalla completa (Claude, vim, less) se les pide que se vuelv
 
 ```sh
 ./install.sh              # comando `hilo` + acceso en el menú
+./install.sh --voz        # además piper, una voz y el hook de Claude, para leer las respuestas en voz alta
 ./install.sh --autostart  # además la abre al iniciar sesión
 ./install.sh --uninstall
 ```

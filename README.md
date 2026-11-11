@@ -60,7 +60,7 @@ Only sessions started from Hilo are recorded, not the ones from GNOME Terminal. 
 
 ## Reading Claude replies aloud
 
-If [piper](https://github.com/rhasspy/piper) and a voice are installed in `~/.local/share/piper-tts` (`venv/bin/piper` and a `.onnx` file), a speaker button shows up in the tab bar. Every Claude Code reply is read aloud as soon as it finishes, one after another when several sessions answer at once.
+`./install.sh --voz` sets it all up (piper, a Spanish voice and the Claude hook; `VOICE=en_US-amy-medium ./install.sh --voz` for another one). If [piper](https://github.com/rhasspy/piper) and a voice are installed in `~/.local/share/piper-tts` (`venv/bin/piper` and a `.onnx` file), a speaker button shows up in the tab bar. Every Claude Code reply is read aloud as soon as it finishes, one after another when several sessions answer at once.
 
 - **The speaker button** opens a panel with what's playing, previous / pause / next / stop, the switch to turn reading on or off, and the history: click a reply to hear it again.
 - **Go to the session** jumps to the exact tab and pane where that Claude session runs, in any Hilo window.
@@ -117,6 +117,7 @@ Then:
 ```sh
 ./install.sh              # `hilo` command + app menu entry
 ./install.sh --autostart  # also open it at login
+./install.sh --voz        # also install piper + a voice and the Claude hook, to read replies aloud
 ./install.sh --uninstall
 ```
 

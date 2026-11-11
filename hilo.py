@@ -288,6 +288,8 @@ EN = {
     "Todavía no hay respuestas.": "No replies yet.",
     "Claude no está anotando sus respuestas: falta el hook.": "Claude isn't logging its replies: the hook is missing.",
     "Reparar": "Fix",
+    "Hook de lectura en voz alta registrado.": "Read-aloud hook registered.",
+    "El hook de lectura en voz alta ya estaba registrado.": "The read-aloud hook was already registered.",
     "No se pudo registrar el hook.": "Could not register the hook.",
     "hilo: piper no pudo leer la respuesta {i}": "hilo: piper could not read reply {i}",
 }
@@ -871,11 +873,17 @@ def tts_hook_registered():
     except (OSError, ValueError):
         return None
     cmds = [h.get("command") or "" for g in stops for h in g.get("hooks") or []]
-    return any("--tts-hook" in c or "speak-last-reply" in c for c in cmds)
+    return any("--tts-hook" in c for c in cmds)
+
+
+# Hooks del antiguo Claude TTS (icono de bandeja): Hilo los reemplaza.
+OLD_TTS_HOOKS = ("speak-last-reply.sh", "tts-note-tab.sh")
 
 
 def tts_register_hook():
-    """Agrega `hilo --tts-hook` como grupo propio (otras herramientas reescriben grupos ajenos)."""
+    """Deja `hilo --tts-hook` como hook Stop, en un grupo propio (otras herramientas, como
+    Roam, reescriben los grupos que tienen comandos suyos), y quita los del antiguo Claude
+    TTS. Devuelve True si cambió algo; antes guarda una copia en settings.json.bak-hilo."""
     path = os.path.join(HOME, ".claude", "settings.json")
     try:
         with open(path, encoding="utf-8") as f:
@@ -883,13 +891,30 @@ def tts_register_hook():
         settings = json.loads(raw)
     except FileNotFoundError:
         raw, settings = None, {}
-    if raw is not None:
-        atomic_write(path + ".bak-hilo", raw.encode())
-    exe = os.path.join(HOME, ".local/bin/hilo")
-    cmd = (exe if os.path.exists(exe) else shlex.quote(os.path.realpath(__file__))) + " --tts-hook"
-    settings.setdefault("hooks", {}).setdefault("Stop", []).append(
-        {"hooks": [{"type": "command", "command": cmd, "timeout": 5}]})
-    atomic_write(path, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode())
+    hooks = settings.setdefault("hooks", {})
+    changed = False
+    for event in list(hooks):
+        groups = []
+        for g in hooks[event]:
+            keep = [h for h in g.get("hooks") or [] if not any(o in (h.get("command") or "") for o in OLD_TTS_HOOKS)]
+            changed |= len(keep) != len(g.get("hooks") or [])
+            if keep:
+                groups.append(dict(g, hooks=keep))
+        if groups:
+            hooks[event] = groups
+        else:
+            del hooks[event]
+    stops = hooks.setdefault("Stop", [])
+    if not any("--tts-hook" in (h.get("command") or "") for g in stops for h in g.get("hooks") or []):
+        exe = os.path.join(HOME, ".local/bin/hilo")
+        cmd = (exe if os.path.exists(exe) else shlex.quote(os.path.realpath(__file__))) + " --tts-hook"
+        stops.append({"hooks": [{"type": "command", "command": cmd, "timeout": 5}]})
+        changed = True
+    if changed:
+        if raw is not None:
+            atomic_write(path + ".bak-hilo", raw.encode())
+        atomic_write(path, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode())
+    return changed
 
 
 class TtsPlayer:
@@ -3977,6 +4002,10 @@ def main():
     args = sys.argv[1:]
     if "--tts-hook" in args:
         return tts_hook()
+    if "--tts-register" in args:
+        print(T("Hook de lectura en voz alta registrado.") if tts_register_hook()
+              else T("El hook de lectura en voz alta ya estaba registrado."))
+        return 0
     if "-h" in args or "--help" in args:
         print(T("USO", state=STATE_FILE, history=HISTORY_FILE, config=CONFIG_FILE))
         return 0

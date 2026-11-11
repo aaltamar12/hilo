@@ -2,6 +2,8 @@
 # Instala Hilo para el usuario actual.
 #   ./install.sh              comando `hilo` + acceso en el menú de aplicaciones
 #   ./install.sh --autostart  además la abre al iniciar sesión (recupera la sesión tras un apagón)
+#   ./install.sh --voz        además instala piper y una voz, y registra el hook de Claude Code
+#                             para leer sus respuestas en voz alta (VOICE=otra_voz para cambiarla)
 #   ./install.sh --uninstall
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -58,7 +60,7 @@ Name[es]=Abrir sin restaurar
 Exec=$BIN --fresh
 DESKTOP
 
-if [[ "${1:-}" == "--autostart" ]]; then
+if [[ " $* " == *" --autostart "* ]]; then
   mkdir -p "$(dirname "$AUTO")"
   cp "$DESK" "$AUTO"
   say "Se abrirá sola al iniciar sesión." "It will open on its own when you log in."
@@ -79,4 +81,25 @@ PY
 touch "$ICONS"
 gtk-update-icon-cache -f -t "$ICONS" 2>/dev/null || true
 update-desktop-database "$(dirname "$DESK")" 2>/dev/null || true
+
+# Lectura en voz alta de las respuestas de Claude Code: piper + una voz + el hook Stop.
+if [[ " $* " == *" --voz "* || " $* " == *" --voice "* ]]; then
+  PIPER_DIR="$HOME/.local/share/piper-tts"
+  VOICE="${VOICE:-es_MX-claude-high}"
+  lang="${VOICE%%-*}"; family="${lang%%_*}"; rest="${VOICE#*-}"; name="${rest%-*}"; quality="${VOICE##*-}"
+  URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/$family/$lang/$name/$quality"
+  command -v paplay >/dev/null || { say "Falta paplay (PulseAudio o PipeWire)." "paplay is missing (PulseAudio or PipeWire)."; exit 1; }
+  python3 -c 'import venv, ensurepip' 2>/dev/null || {
+    say "Falta python3-venv: sudo apt install python3-venv" "python3-venv is missing: sudo apt install python3-venv"; exit 1; }
+  mkdir -p "$PIPER_DIR"
+  if [ ! -x "$PIPER_DIR/venv/bin/piper" ]; then
+    say "Instalando piper…" "Installing piper…"
+    python3 -m venv "$PIPER_DIR/venv"
+    "$PIPER_DIR/venv/bin/pip" install -q piper-tts
+  fi
+  for ext in onnx onnx.json; do
+    [ -f "$PIPER_DIR/$VOICE.$ext" ] || curl -fsSL -o "$PIPER_DIR/$VOICE.$ext" "$URL/$VOICE.$ext"
+  done
+  "$BIN" --tts-register
+fi
 say "Listo: ejecute 'hilo' o búsquela como Hilo en el menú." "Done: run 'hilo' or find Hilo in the app menu."

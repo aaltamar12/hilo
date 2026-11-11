@@ -40,7 +40,7 @@ Every tab can be split into panes. Each pane is an independent terminal with its
 - The X on a tab closes the whole tab.
 - Drag the divider to resize.
 - **Drag a tab to turn it into a pane:** grab the tab and drag it over the terminal area. The half of the pane where it will land (left, right, top or bottom, whichever edge is closest) lights up in orange, and when you drop it, it stays there with its shells still running. If the tab had several panes, they all move together. Dragging within the tab bar still reorders tabs.
-- **Onto another tab's panes:** while dragging, hover over another tab for a moment and it opens, so you can drop on its panes.
+- **Onto another tab's panes:** while dragging, hover over another tab: it lights up in orange and fills up, and when it's full it opens, so you can drop on its panes. The open tab keeps its orange line, and a short guide over the terminal says what each spot does. (Moving sideways inside the tab bar reorders tabs instead; pull the tab down first.)
 - **Move or pull out a pane:** in a tab with several panes, move the mouse to the top edge of a pane and a **⠿ Drag pane** handle shows up. Drop it on another pane (of this tab or another) to put it there, on the tab bar to turn it into its own tab at that spot, or outside any window to open it in a new one.
 - **Between windows:** drop a tab on another window's tab bar to move it there. Drop it on another window's content to make it a pane there. Drop it outside any window to open it in a new window. A window left with no tabs closes itself.
 - **The other way around:** right click → *Move pane to a new tab* pulls it out into its own tab without stopping what's running (also **Ctrl+Shift+D**).

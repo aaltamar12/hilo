@@ -249,6 +249,13 @@ EN = {
     "Hilo no está abierta.": "Hilo is not running.",
     "Listo: Hilo se actualizó sin cerrar nada.": "Done: Hilo updated without closing anything.",
     # arrastrar paneles
+    "Espere sobre una pestaña para abrirla · Suelte en un panel para moverlo ahí · "
+    "En la barra queda como pestaña · Fuera de la ventana, en una nueva":
+        "Hover over a tab to open it · Drop on a pane to move it there · "
+        "On the tab bar it becomes a tab · Outside the window, a new one",
+    "Espere sobre una pestaña para abrirla · Suelte en el borde de un panel para unirla · "
+    "En la barra, para reordenar":
+        "Hover over a tab to open it · Drop on the edge of a pane to join it · On the tab bar, to reorder",
     "Arrastrar panel": "Drag pane",
     "Suéltelo en otro panel, en la barra de pestañas o fuera de la ventana":
         "Drop it on another pane, on the tab bar or outside the window",
@@ -2022,6 +2029,15 @@ class Tab:
         self.widget.add(self.box)
         self.widget.add_overlay(self.dropzone)
         self.widget.set_overlay_pass_through(self.dropzone, True)
+        # Guía que se ve solo mientras se arrastra (con opacidad: una capa del Overlay que
+        # se muestra después no se dibuja).
+        self.hint = Gtk.Label(halign=Gtk.Align.CENTER, valign=Gtk.Align.START, margin_top=12,
+                              wrap=True, justify=Gtk.Justification.CENTER, max_width_chars=70)
+        self.hint.get_style_context().add_class("hilo-drag-hint")
+        self.hint.set_opacity(0)
+        self.widget.add_overlay(self.hint)
+        self.widget.set_overlay_pass_through(self.hint, True)
+        self.spring_frac = None     # 0..1 mientras se espera encima para abrirla
         self.widget.drag_dest_set(Gtk.DestDefaults(0), [TAB_TARGET, PANE_TARGET], Gdk.DragAction.MOVE)
         self.widget.connect("drag-motion", self.on_drag_motion)
         self.widget.connect("drag-leave", lambda *_: self.set_drop(None))
@@ -2048,6 +2064,7 @@ class Tab:
         self.usage_label.get_style_context().add_class("dim-label")
         self.usage_label.get_style_context().add_class("hilo-usage")
         self.tab_box = Gtk.Box(spacing=4)
+        self.tab_box.connect("draw", self.draw_spring)
         inner = Gtk.Box(spacing=6)
         inner.pack_start(self.label, True, True, 0)
         inner.pack_start(self.count_label, False, False, 0)
@@ -2061,6 +2078,43 @@ class Tab:
         for w in (self.usage_label, self.count_label):
             w.set_no_show_all(True)
             w.hide()
+
+    def draw_spring(self, w, cr):
+        """La pestaña a la que se apunta durante un arrastre: naranja, y se llena hasta abrirse."""
+        if self.spring_frac is None:
+            return False
+        import math
+        a = w.get_allocation()
+        x, y, wd, ht, r = -6, -4, a.width + 12, a.height + 8, 7
+
+        def rounded(width):
+            cr.new_sub_path()
+            cr.arc(x + width - r, y + r, r, -math.pi / 2, 0)
+            cr.arc(x + width - r, y + ht - r, r, 0, math.pi / 2)
+            cr.arc(x + r, y + ht - r, r, math.pi / 2, math.pi)
+            cr.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
+            cr.close_path()
+        cr.set_source_rgba(1.0, 0.62, 0.35, 0.16)
+        rounded(wd)
+        cr.fill()
+        if self.spring_frac > 0:
+            cr.save()
+            cr.rectangle(x, y, wd * self.spring_frac, ht)
+            cr.clip()
+            cr.set_source_rgba(1.0, 0.62, 0.35, 0.38)
+            rounded(wd)
+            cr.fill()
+            cr.restore()
+        cr.set_source_rgba(1.0, 0.62, 0.35, 0.95)
+        cr.set_line_width(2)
+        rounded(wd)
+        cr.stroke()
+        return False
+
+    def set_hint(self, text):
+        if text:
+            self.hint.set_text(text)
+        self.hint.set_opacity(1 if text else 0)
 
     # -- árbol de paneles
     def build(self, node, saved_at):
@@ -2471,6 +2525,7 @@ class TermWindow(Gtk.ApplicationWindow):
         self.nb.connect("drag-motion", self.on_nb_drag_motion)
         self.nb.connect("drag-leave", lambda *_: self.cancel_spring())
         self.nb.connect("drag-drop", self.on_nb_drag_drop)
+        self.nb.connect_after("draw", self.on_nb_draw)
         self.nb.drag_dest_get_target_list().add(Gdk.Atom.intern("HILO_PANE", False), Gtk.TargetFlags.SAME_APP, 1)
         # Botones al final de la barra: nueva pestaña y ocultar la barra.
         self.plus_btn = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.MENU)
@@ -2576,6 +2631,7 @@ class TermWindow(Gtk.ApplicationWindow):
     # -- arrastrar una pestaña para convertirla en panel
     def on_tab_drag_begin(self, *_):
         self.app.dragging = self.current()
+        self.app.show_drag_hints()
         # Mientras se arrastra, todas las ventanas muestran su barra para poder soltar ahí.
         for w in self.app.windows:
             w.nb.set_show_tabs(True)
@@ -2583,6 +2639,36 @@ class TermWindow(Gtk.ApplicationWindow):
         # Al tomarla, GTK la muestra; se vuelve a la anterior para soltarla encima.
         if prev in self.tabs and prev is not self.app.dragging:
             GLib.idle_add(lambda: self.nb.set_current_page(self.nb.page_num(prev.widget)) and False)
+
+    def on_nb_draw(self, nb, cr):
+        """Mientras se arrastra una pestaña, GTK no dibuja la pestaña abierta (cree que es la
+        que va en la mano). Como Hilo abre otra para poder soltar ahí, se dibuja aquí."""
+        drag = self.app.dragging
+        cur = self.current()
+        if drag is None or cur is None or cur is drag or not cur.tab_box.get_mapped():
+            return False
+        pos = cur.tab_box.translate_coordinates(nb, 0, 0)
+        if not pos:
+            return False
+        a = cur.tab_box.get_allocation()
+        x, y = pos
+        cr.save()
+        ctx = nb.get_style_context()
+        ok, bg = ctx.lookup_color("theme_base_color")
+        if ok:
+            cr.set_source_rgba(bg.red, bg.green, bg.blue, 1)
+            cr.rectangle(x - 8, y - 6, a.width + 16, a.height + 12)
+            cr.fill()
+        cr.set_source_rgba(1.0, 0.62, 0.35, 1)       # la línea naranja de la pestaña abierta
+        cr.rectangle(x - 8, y + a.height + 3, a.width + 16, 3)
+        cr.fill()
+        cr.translate(x, y)
+        cur.draw_spring(cur.tab_box, cr)
+        cr.restore()
+        cr.save()
+        nb.propagate_draw(cur.tab_box, cr)
+        cr.restore()
+        return False
 
     def tab_at(self, x, y):
         """La pestaña cuya etiqueta está en (x, y), en coordenadas del cuaderno."""
@@ -2602,7 +2688,9 @@ class TermWindow(Gtk.ApplicationWindow):
             self.cancel_spring()
         elif not self.spring or self.spring[0] is not hover:
             self.cancel_spring()
-            self.spring = (hover, GLib.timeout_add(450, self.spring_open, hover))
+            hover.spring_frac = 0.0
+            hover.tab_box.queue_draw()
+            self.spring = (hover, GLib.timeout_add(25, self.spring_tick, hover, time.monotonic()))
         if self.app.dragging_pane is not None:
             Gdk.drag_status(_ctx, Gdk.DragAction.MOVE if self.in_tab_bar(y) else 0, _time)
             return True
@@ -2629,15 +2717,28 @@ class TermWindow(Gtk.ApplicationWindow):
             GLib.timeout_add(100, lambda: pane.tab.detach_pane(pane, self, pos) and False)
         return True
 
-    def spring_open(self, tab):
+    SPRING_S = 0.55     # lo que hay que esperar encima de una pestaña para que se abra
+
+    def spring_tick(self, tab, started):
+        frac = (time.monotonic() - started) / self.SPRING_S
+        if frac < 1 and tab in self.tabs:
+            tab.spring_frac = frac
+            tab.tab_box.queue_draw()
+            return True
         self.spring = None
+        tab.spring_frac = None
+        tab.tab_box.queue_draw()
         if tab in self.tabs:
             self.nb.set_current_page(self.nb.page_num(tab.widget))
+            tab.set_hint(self.app.drag_hint())
         return False
 
     def cancel_spring(self):
         if self.spring:
             GLib.source_remove(self.spring[1])
+            tab = self.spring[0]
+            tab.spring_frac = None
+            tab.tab_box.queue_draw()
             self.spring = None
 
     def on_tab_drag_end(self, *_):
@@ -2647,6 +2748,9 @@ class TermWindow(Gtk.ApplicationWindow):
         if not self.app.pending_dock:
             self.app.dragging = None
         for w in self.app.windows:
+            w.cancel_spring()
+            for t in w.tabs:
+                t.set_hint(None)
             w.update_tabs_visibility()
             for t in w.tabs:
                 t.set_drop(None)
@@ -3403,6 +3507,8 @@ class HiloApp(Gtk.Application):
             progressbar.hilo-tts trough, progressbar.hilo-tts progress { min-height: 4px; border-radius: 2px; }
             progressbar.hilo-tts progress { background: #ff9f5a; border-color: #ff9f5a; }
             label.hilo-tts-on { color: #ff9f5a; }
+            label.hilo-drag-hint { background: alpha(#1e140e, 0.88); color: #ffd9bd; border-radius: 12px;
+                                   padding: 6px 14px; font-size: 0.9em; }
             label.hilo-grip { background: #ff9f5a; color: #1e140e; border-radius: 9px;
                               padding: 1px 10px; font-size: 0.85em; font-weight: bold; }
         """)
@@ -3577,6 +3683,22 @@ class HiloApp(Gtk.Application):
     def pane_drag_begin(self, pane):
         self.dragging_pane = pane     # el asa sigue a la vista: ocultarla cortaría el arrastre
         self.refresh_tab_bars()
+        self.show_drag_hints()
+
+    def drag_hint(self):
+        if self.dragging_pane is not None:
+            return T("Espere sobre una pestaña para abrirla · Suelte en un panel para moverlo ahí · "
+                     "En la barra queda como pestaña · Fuera de la ventana, en una nueva")
+        if self.dragging is not None:
+            return T("Espere sobre una pestaña para abrirla · Suelte en el borde de un panel para unirla · "
+                     "En la barra, para reordenar")
+        return None
+
+    def show_drag_hints(self):
+        text = self.drag_hint()
+        for w in self.windows:
+            for t in w.tabs:
+                t.set_hint(text)
 
     def pane_drag_end(self):
         pane, self.dragging_pane = self.dragging_pane, None
@@ -3585,6 +3707,7 @@ class HiloApp(Gtk.Application):
             w.update_tabs_visibility()
             for t in w.tabs:
                 t.set_drop(None)
+                t.set_hint(None)
         if pane:
             pane.set_grip(False, hover=False)
 

@@ -95,6 +95,7 @@ ACTIONS = [
     ("fullscreen", "Pantalla completa", ["F11"]),
     ("preferences", "Preferencias", ["<Control>comma"]),
     ("show_help", "Ver atajos y controles", ["<Control><Shift>question"]),
+    ("apply_update", "Aplicar actualización de Hilo sin cerrar nada", []),
 ]
 
 # Cómo se agrupan las acciones en la ventana de atajos y controles.
@@ -104,7 +105,7 @@ HELP_GROUPS = [
     ("Paneles", ["split_right", "split_down", "focus_left", "focus_right", "focus_up", "focus_down",
                  "zoom_pane", "detach_pane", "close_pane"]),
     ("Texto", ["copy", "paste", "search", "zoom_in", "zoom_out", "zoom_reset"]),
-    ("Ventana", ["new_window", "close_window", "fullscreen", "preferences", "show_help"]),
+    ("Ventana", ["new_window", "close_window", "fullscreen", "preferences", "show_help", "apply_update"]),
 ]
 # Lo que no se configura: teclas fijas y gestos con el mouse.
 HELP_FIXED = [
@@ -572,6 +573,7 @@ class Pane:
         self.widget.add(inner)
         self.widget.show_all()
 
+        self.relevo = saved.get("relevo")   # terminal viva heredada de la versión anterior
         self.restore_cmd = saved.get("command")
         self.restore_scroll = saved.get("id") and os.path.join(SCROLL_DIR, f"{saved['id']}.txt")
         self.saved_at = saved.get("_saved_at")
@@ -582,6 +584,8 @@ class Pane:
 
     # -- arranque
     def start(self):
+        if self.relevo and self.adopt():
+            return
         if self.restore_scroll and os.path.exists(self.restore_scroll):
             try:
                 with open(self.restore_scroll, encoding="utf-8", errors="replace") as f:
@@ -599,6 +603,86 @@ class Pane:
         self.term.spawn_async(
             Vte.PtyFlags.DEFAULT, self.cwd, [user_shell()], child_env(),
             GLib.SpawnFlags.DEFAULT, None, None, -1, None, self.on_spawned, None)
+
+    def adopt(self):
+        """Retoma la terminal que dejó la versión anterior de Hilo (actualización en
+        caliente): mismo pty, misma shell y mismos procesos, que nunca se cerraron."""
+        r, self.relevo = self.relevo, None
+        try:
+            pty = Vte.Pty.new_foreign_sync(r["fd"], None)
+            self.term.set_pty(pty)
+            self.term.watch_child(r["pid"])
+        except (GLib.Error, KeyError, TypeError) as e:
+            print(f"hilo: no se pudo retomar el panel {self.id}: {e}", file=sys.stderr)
+            return False
+        self.pid = r["pid"]
+        self.cmd = self.restore_cmd
+        self.restore_cmd = None
+        text = r.get("text") or ""
+        lines = text.split("\n")
+        while lines and not lines[-1].strip():
+            lines.pop()
+        if lines:
+            self.term.feed("\r\n".join(lines).encode())
+            self.term.feed(f"\r\x1b[{r['col']}C".encode() if r.get("col") else b"\r")
+        if r.get("title"):
+            self.term.feed(f"\x1b]0;{r['title']}\x07".encode())
+        # Los modos de la terminal no viajan: se vuelven a activar los que usaba el
+        # programa (pantalla alterna; Claude además mouse y pegado entre corchetes).
+        modes = ""
+        if r.get("alt"):
+            modes += "\x1b[?1049h"
+        if r.get("claude"):
+            modes += ("\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h" if r.get("alt") else "") + "\x1b[?2004h"
+        if modes:
+            self.term.feed(modes.encode())
+        GLib.timeout_add(400, self.nudge_redraw)
+        self.win.refresh_titles()
+        return True
+
+    def nudge_redraw(self):
+        """SIGWINCH al programa en primer plano para que se vuelva a dibujar."""
+        pty = self.term.get_pty()
+        try:
+            if pty:
+                os.killpg(os.tcgetpgrp(pty.get_fd()), signal.SIGWINCH)
+        except OSError:
+            pass
+        return False
+
+    def relevo_info(self):
+        """Lo que la versión nueva necesita para retomar esta terminal sin cerrarla."""
+        pty = self.term.get_pty()
+        if not (pty and self.pid):
+            return None
+        fd = pty.get_fd()
+        os.set_inheritable(fd, True)
+        adj = self.term.get_vadjustment()
+        alt = adj.get_upper() - adj.get_lower() <= adj.get_page_size() and self.foreground_running()
+        fg_argv = []
+        try:
+            fg = os.tcgetpgrp(fd)
+            if fg != self.pid:
+                fg_argv = read_cmdline(fg) or []
+        except OSError:
+            pass
+        claude = any(os.path.basename(a) == "claude" for a in fg_argv[:2])
+        if alt:
+            text = ""      # el programa a pantalla completa se vuelve a dibujar solo
+        else:
+            text = self.raw_text() or ""
+        return {"fd": fd, "pid": self.pid, "alt": alt, "claude": claude,
+                "col": self.term.get_cursor_position()[0],
+                "title": self.term.get_window_title(), "text": text}
+
+    def raw_text(self):
+        stream = Gio.MemoryOutputStream.new_resizable()
+        try:
+            self.term.write_contents_sync(stream, Vte.WriteFlags.DEFAULT, None)
+            stream.close(None)
+            return stream.steal_as_bytes().get_data().decode("utf-8", "replace")
+        except GLib.Error:
+            return None
 
     def on_spawned(self, term, pid, error, *_):
         if error or pid <= 0:
@@ -688,7 +772,12 @@ class Pane:
         return base or "/"
 
     def serialize(self):
-        return {"id": self.id, "cwd": self.cwd, "command": self.cmd, "claude_ids": self.claude_ids[-20:]}
+        d = {"id": self.id, "cwd": self.cwd, "command": self.cmd, "claude_ids": self.claude_ids[-20:]}
+        if self.app.relevo_out:
+            info = self.relevo_info()
+            if info:
+                d["relevo"] = info
+        return d
 
     def text(self):
         stream = Gio.MemoryOutputStream.new_resizable()
@@ -1291,6 +1380,16 @@ class TermWindow(Gtk.ApplicationWindow):
         self.hide_btn = Gtk.Button.new_from_icon_name("view-conceal-symbolic", Gtk.IconSize.MENU)
         self.hide_btn.connect("clicked", lambda *_: self.app.toggle_tabs())
         bar_btns = Gtk.Box(spacing=0)
+        self.update_btn = Gtk.Button(label="Actualizar")
+        self.update_btn.get_style_context().add_class("hilo-update")
+        self.update_btn.set_focus_on_click(False)
+        self.update_btn.set_valign(Gtk.Align.CENTER)
+        self.update_btn.set_margin_end(8)
+        self.update_btn.set_tooltip_text("Hay una versión nueva de Hilo. Se aplica sin cerrar nada: "
+                                         "las shells, Claude y lo que esté corriendo siguen vivos.")
+        self.update_btn.connect("clicked", lambda *_: self.app.hot_reload())
+        self.update_btn.set_no_show_all(True)
+        bar_btns.pack_start(self.update_btn, False, False, 0)
         # Consumo de todo el equipo (CPU, temperatura y RAM).
         self.sys_label = Gtk.Label(margin_end=10)
         self.sys_label.get_style_context().add_class("hilo-sys")
@@ -1303,6 +1402,7 @@ class TermWindow(Gtk.ApplicationWindow):
         bar_btns.show_all()
         self.update_system()
         self.nb.set_action_widget(bar_btns, Gtk.PackType.END)
+        self.update_update_btn()
         self.update_bar_tooltips()
 
         self.search = Gtk.SearchEntry(placeholder_text="Buscar en el panel (Enter: anterior, Shift+Enter: siguiente)")
@@ -1461,6 +1561,9 @@ class TermWindow(Gtk.ApplicationWindow):
         self.nb.set_show_tabs(not self.app.config["tabs_hidden"] or bool(self.app.dragging))
         self.refresh_titles()
 
+    def update_update_btn(self):
+        self.update_btn.set_visible(self.app.update_ready)
+
     def update_system(self):
         text = self.app.system_text if self.app.config["show_system"] else None
         if not text:
@@ -1591,6 +1694,8 @@ class TermWindow(Gtk.ApplicationWindow):
              "toggle_tabs", self.app.toggle_tabs, True),
             None,
             ("Preferencias…", "preferences", self.app.show_preferences, True),
+        ] + ([("Aplicar actualización de Hilo", "apply_update", self.app.hot_reload, True)]
+             if self.app.update_ready else []) + [
         ]
         hist = self.app.recent_claude(15)
         closed = list_closed()[:15]
@@ -1726,6 +1831,7 @@ class TermWindow(Gtk.ApplicationWindow):
             "toggle_tabs": self.app.toggle_tabs,
             "preferences": self.app.show_preferences,
             "show_help": self.app.show_help,
+            "apply_update": self.app.hot_reload,
         }.get(action)
         if fn:
             fn()
@@ -2009,8 +2115,13 @@ class PreferencesWindow(Gtk.Window):
 # ---------------------------------------------------------------- aplicación
 
 class HiloApp(Gtk.Application):
-    def __init__(self, fresh=False):
+    def __init__(self, fresh=False, relevo=None):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+        self.relevo_in = relevo      # archivo con las terminales que deja la versión anterior
+        self.relevo_out = False      # True mientras se arma ese archivo
+        self.code_path = os.path.realpath(__file__)
+        self.code_mtime = self.file_mtime()
+        self.update_ready = False
         self.set_property("register-session", True)
         self.fresh = fresh
         self.windows = []
@@ -2042,6 +2153,9 @@ class HiloApp(Gtk.Application):
             frame.hilo-pane.multi > border { border: 2px solid alpha(@theme_fg_color, 0.07); }
             frame.hilo-pane.multi.focused > border { border-color: #ff9f5a; }
             label.hilo-usage { font-size: 0.82em; font-feature-settings: "tnum"; }
+            button.hilo-update { background: #ff9f5a; color: #1e140e; border: none; box-shadow: none;
+                                 padding: 0 10px; min-height: 22px; border-radius: 11px; font-weight: bold; }
+            button.hilo-update:hover { background: #ffb27a; }
             label.hilo-sys { font-size: 0.9em; font-feature-settings: "tnum"; opacity: 0.75; }
             label.hilo-sys.hot { color: #ff7a59; opacity: 1; }
         """)
@@ -2052,6 +2166,10 @@ class HiloApp(Gtk.Application):
         for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
             GLib.unix_signal_add(GLib.PRIORITY_HIGH, sig, self.on_signal, sig)
         GLib.timeout_add_seconds(self.config["state_interval_s"], self.tick_state)
+        # `hilo --actualizar` desde otra terminal llega aquí.
+        act = Gio.SimpleAction.new("relevo", None)
+        act.connect("activate", lambda *_: self.hot_reload())
+        self.add_action(act)
         GLib.timeout_add_seconds(self.config["scroll_interval_s"], self.tick_scroll)
 
     def do_activate(self):
@@ -2060,6 +2178,18 @@ class HiloApp(Gtk.Application):
             return
         self.started = True
         state = None if self.fresh else self.load_state()
+        if self.relevo_in:
+            try:
+                with open(self.relevo_in) as f:
+                    state = json.load(f)
+                state["saved_at"] = None
+            except (OSError, ValueError) as e:
+                print(f"hilo: no se pudo leer el relevo: {e}", file=sys.stderr)
+            finally:
+                try:
+                    os.unlink(self.relevo_in)
+                except OSError:
+                    pass
         if state and state.get("windows"):
             self.font_scale = state.get("font_scale", 1.0)
             self.saved_at = state.get("saved_at")
@@ -2300,6 +2430,48 @@ class HiloApp(Gtk.Application):
             return False
         GLib.timeout_add(400, run)
 
+    def file_mtime(self):
+        try:
+            return os.stat(self.code_path).st_mtime
+        except OSError:
+            return None
+
+    def hot_reload(self):
+        """Actualización en caliente: el proceso se reemplaza por la versión nueva
+        (exec) y le pasa cada pty abierto. El PID no cambia, así que las shells
+        siguen siendo hijas de Hilo y nada se cierra."""
+        try:
+            with open(self.code_path, encoding="utf-8") as f:
+                compile(f.read(), self.code_path, "exec")
+        except (OSError, SyntaxError) as e:
+            self.show_error("La versión nueva de Hilo tiene un error y no se aplicó.", str(e))
+            return
+        for p in self.all_panes():
+            try:
+                p.dump_scroll(force=True)
+            except OSError:
+                pass
+        self.save_state(force=True)    # por si algo falla: queda como tras un apagón
+        self.relevo_out = True
+        try:
+            state = {"version": 1, "font_scale": self.font_scale,
+                     "windows": [w.serialize() for w in self.windows]}
+        finally:
+            self.relevo_out = False
+        path = os.path.join(STATE_DIR, "relevo.json")
+        atomic_write(path, json.dumps(state, ensure_ascii=False).encode())
+        self.frozen = True
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(sys.executable, [sys.executable, self.code_path, "--relevo", path])
+
+    def show_error(self, text, detail):
+        d = Gtk.MessageDialog(transient_for=self.get_active_window(), modal=True,
+                              message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.CLOSE, text=text)
+        d.format_secondary_text(detail[:600])
+        d.run()
+        d.destroy()
+
     def tick_state(self):
         if self.frozen:
             return True
@@ -2310,6 +2482,10 @@ class HiloApp(Gtk.Application):
             self.sample_usage()
         if self.config["show_system"]:
             self.system_text, self.system_hot, self._sys_prev = system_sample(self._sys_prev)
+        if not self.update_ready and self.file_mtime() != self.code_mtime:
+            self.update_ready = True
+            for w in self.windows:
+                w.update_update_btn()
         for w in self.windows:
             w.refresh_titles()
             w.update_system()
@@ -2395,8 +2571,9 @@ class HiloApp(Gtk.Application):
 def main():
     args = sys.argv[1:]
     if "-h" in args or "--help" in args:
-        print("Uso: hilo [--fresh | --historial [N] | --cerradas]\n\n"
+        print("Uso: hilo [--fresh | --historial [N] | --cerradas | --actualizar]\n\n"
               "  --fresh        abrir sin restaurar la sesión guardada\n"
+              "  --actualizar   aplicar la versión nueva a la Hilo abierta, sin cerrar nada\n"
               "  --historial N  últimas N sesiones de Claude con su comando para reanudar (20)\n"
               "  --cerradas     pestañas cerradas guardadas\n"
               f"\nSesión: {STATE_FILE}\nHistorial: {HISTORY_FILE}\nConfiguración: {CONFIG_FILE}")
@@ -2424,10 +2601,22 @@ def main():
                 print(f"  claude --resume {sid}")
             print(f"  texto: {c['_txt']}\n")
         return 0
+    if "--actualizar" in args:
+        # Pide a la Hilo abierta que aplique la versión nueva sin cerrar nada.
+        client = Gio.Application(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+        client.register(None)
+        if not client.get_is_remote():
+            print("Hilo no está abierta.")
+            return 1
+        client.activate_action("relevo", None)
+        client.get_dbus_connection().flush_sync(None)
+        print("Listo: Hilo se actualizó sin cerrar nada.")
+        return 0
     GLib.set_prgname(APP_ID)
     GLib.set_application_name("Hilo")
     Gtk.Window.set_default_icon_name(APP_ID)
-    app = HiloApp(fresh="--fresh" in args)
+    relevo = args[args.index("--relevo") + 1] if "--relevo" in args and args.index("--relevo") + 1 < len(args) else None
+    app = HiloApp(fresh="--fresh" in args, relevo=relevo)
     return app.run([sys.argv[0]])
 
 

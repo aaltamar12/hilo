@@ -35,7 +35,9 @@ export XDG_CONFIG_HOME="$(mktemp -d)"
 
 If you want to keep the test session across restarts (for example, to test restoring), use a fixed folder instead of `mktemp -d`.
 
-`./hilo.py --fresh` opens without restoring anything.
+`./hilo.py --fresh` opens without restoring anything. With the development copy open, `./hilo.py --actualizar` (same environment variables) applies your edits without closing it.
+
+To test without any window showing up on your desktop, run it on a virtual display: `Xvfb :97 &` and then `DISPLAY=:97 GDK_BACKEND=x11 ./hilo.py`.
 
 ## How it's organized
 
@@ -69,6 +71,7 @@ If you change this format, make sure a session saved by the previous version sti
 - **Every write to disk goes through `atomic_write`.** A power cut in the middle of a write must never leave a corrupt file.
 - **Nothing risky runs on its own.** On restore, only Claude and the `autorun` list are relaunched. Any other command is typed at the prompt and waits for Enter.
 - **The final save on shutdown must not be lost.** If you touch signal handling (`SIGTERM`, `SIGHUP`) or how child processes are closed, check that the session is still complete after a shutdown.
+- **Hot updates must keep working.** `hot_reload` hands the running state (including each pane's `relevo` data: pty fd, shell pid, screen text) to the new code via `exec`. The new version must still accept what the previous one serialized.
 - **Keep it light.** Hilo watches processes every few seconds. No heavy work in those timers.
 
 ## Testing a change

@@ -35,7 +35,9 @@ export XDG_CONFIG_HOME="$(mktemp -d)"
 
 Si quiere conservar la sesión de prueba entre arranques (por ejemplo, para probar la restauración), use una carpeta fija en lugar de `mktemp -d`.
 
-`./hilo.py --fresh` abre sin restaurar nada.
+`./hilo.py --fresh` abre sin restaurar nada. Con la copia de desarrollo abierta, `./hilo.py --actualizar` (con las mismas variables) aplica sus cambios sin cerrarla.
+
+Para probar sin que aparezca ninguna ventana en su escritorio, use una pantalla virtual: `Xvfb :97 &` y luego `DISPLAY=:97 GDK_BACKEND=x11 ./hilo.py`.
 
 ## Cómo está organizado
 
@@ -69,6 +71,7 @@ Si cambia este formato, asegúrese de que una sesión guardada con la versión a
 - **Toda escritura a disco pasa por `atomic_write`.** Un apagón a mitad de una escritura no puede dejar un archivo corrupto.
 - **Nada peligroso se ejecuta solo.** Al restaurar, solo Claude y la lista `autorun` se vuelven a lanzar. Cualquier otro comando queda escrito en el prompt esperando Enter.
 - **El guardado final al apagar no se puede perder.** Si toca el manejo de señales (`SIGTERM`, `SIGHUP`) o el cierre de procesos hijos, pruebe que la sesión siga completa después de un apagado.
+- **La actualización en caliente tiene que seguir funcionando.** `hot_reload` le pasa el estado vivo (incluido el `relevo` de cada panel: el fd del pty, el pid de la shell y el texto en pantalla) al código nuevo con `exec`. La versión nueva tiene que aceptar lo que serializó la anterior.
 - **Liviana.** Hilo vigila los procesos cada pocos segundos. Nada de trabajo pesado en esos temporizadores.
 
 ## Probar un cambio

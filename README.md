@@ -83,6 +83,12 @@ Under *General* you can turn the per-tab usage and the system monitor on or off,
 
 ![Shortcuts and controls window](docs/screenshots/en/help.png)
 
+## Updating without restarting
+
+When `hilo.py` changes (a `git pull`, for example), an orange **Actualizar** button appears in the tab bar. Clicking it applies the new version without closing anything: Hilo replaces itself with the new code in the same process and hands over every open terminal, so shells, Claude sessions and running programs keep going. You can also run `hilo --actualizar` from any terminal, or use right click → *Aplicar actualización de Hilo*.
+
+Full-screen programs (Claude, vim, less) are asked to redraw themselves right after. If the new version has a syntax error, nothing is applied and you get a message.
+
 ## Install
 
 Requirements: Linux with GNOME (or any GTK 3 desktop), Python 3.10+, and PyGObject with GTK 3 and VTE 2.91. On Ubuntu and Debian:

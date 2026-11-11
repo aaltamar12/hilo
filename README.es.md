@@ -81,6 +81,12 @@ En *General* se activan o desactivan el consumo en las pestañas, el monitor del
 
 ![Ventana de atajos y controles](docs/screenshots/es/help.png)
 
+## Actualizar sin reiniciar
+
+Cuando cambia `hilo.py` (por ejemplo, tras un `git pull`), aparece en la barra de pestañas un botón naranja **Actualizar**. Al hacer clic se aplica la versión nueva sin cerrar nada: Hilo se reemplaza por el código nuevo en el mismo proceso y le entrega cada terminal abierta, así que las shells, las sesiones de Claude y los programas siguen corriendo. También se puede con `hilo --actualizar` desde cualquier terminal, o con clic derecho → *Aplicar actualización de Hilo*.
+
+A los programas a pantalla completa (Claude, vim, less) se les pide que se vuelvan a dibujar. Si la versión nueva tiene un error de sintaxis, no se aplica nada y aparece un aviso.
+
 ## Instalar
 
 ```sh

@@ -44,6 +44,8 @@ DEFAULT_CONFIG = {
     "scroll_interval_s": 10,
     # Mostrar RAM y CPU de cada pestaña (shell + todo lo que corre dentro).
     "show_usage": True,
+    # CPU, temperatura y RAM de todo el equipo, al final de la barra de pestañas.
+    "show_system": True,
     # Modo discreto: la barra de pestañas oculta (se siguen manejando con el teclado).
     "tabs_hidden": False,
     # Los atajos se cambian en Preferencias (Ctrl+,); quedan en "shortcuts".
@@ -362,6 +364,73 @@ def pss_kb(pid, fallback):
     except (OSError, ValueError):
         pass
     return fallback
+
+
+_TEMP_PATH = None
+
+
+def cpu_temp_path():
+    """Sensor de temperatura del procesador (se busca una sola vez)."""
+    global _TEMP_PATH
+    if _TEMP_PATH is not None:
+        return _TEMP_PATH or None
+    found = ""
+    try:
+        for z in sorted(os.listdir("/sys/class/thermal")):
+            base = f"/sys/class/thermal/{z}"
+            try:
+                if open(base + "/type").read().strip() == "x86_pkg_temp":
+                    found = base + "/temp"
+                    break
+            except OSError:
+                pass
+        if not found:
+            for hw in sorted(os.listdir("/sys/class/hwmon")):
+                base = f"/sys/class/hwmon/{hw}"
+                try:
+                    name = open(base + "/name").read().strip()
+                except OSError:
+                    continue
+                if name in ("coretemp", "k10temp", "zenpower", "cpu_thermal", "acpitz") and os.path.exists(base + "/temp1_input"):
+                    found = base + "/temp1_input"
+                    if name != "acpitz":
+                        break
+    except OSError:
+        pass
+    _TEMP_PATH = found
+    return found or None
+
+
+def system_sample(prev):
+    """(texto, caliente, estado) con CPU %, temperatura y RAM usada/total del equipo."""
+    try:
+        with open("/proc/stat") as f:
+            vals = [int(x) for x in f.readline().split()[1:]]
+        idle, total = vals[3] + (vals[4] if len(vals) > 4 else 0), sum(vals)
+        mem = {}
+        with open("/proc/meminfo") as f:
+            for line in f:
+                k, v = line.split(":", 1)
+                mem[k] = int(v.split()[0])
+    except (OSError, ValueError, IndexError):
+        return None, False, prev
+    cpu = None
+    if prev:
+        di, dt = idle - prev[0], total - prev[1]
+        cpu = 100.0 * (1 - di / dt) if dt > 0 else 0.0
+    parts = [f"CPU {cpu:.0f}%" if cpu is not None else "CPU …"]
+    temp = None
+    path = cpu_temp_path()
+    if path:
+        try:
+            temp = int(open(path).read()) / 1000
+            parts.append(f"{temp:.0f}°C")
+        except (OSError, ValueError):
+            pass
+    tot = mem.get("MemTotal", 0)
+    used = tot - mem.get("MemAvailable", mem.get("MemFree", 0))
+    parts.append(f"{used / 1048576:.1f}/{tot / 1048576:.1f}G")
+    return " · ".join(parts), bool(temp and temp >= 85), (idle, total)
 
 
 def fmt_mem(kb):
@@ -1216,11 +1285,17 @@ class TermWindow(Gtk.ApplicationWindow):
         self.hide_btn = Gtk.Button.new_from_icon_name("view-conceal-symbolic", Gtk.IconSize.MENU)
         self.hide_btn.connect("clicked", lambda *_: self.app.toggle_tabs())
         bar_btns = Gtk.Box(spacing=0)
+        # Consumo de todo el equipo (CPU, temperatura y RAM).
+        self.sys_label = Gtk.Label(margin_end=10)
+        self.sys_label.get_style_context().add_class("hilo-sys")
+        self.sys_label.set_tooltip_text("Todo el equipo: uso de CPU, temperatura del procesador y RAM usada / total")
+        bar_btns.pack_start(self.sys_label, False, False, 0)
         for b in (self.plus_btn, self.prefs_btn, self.help_btn, self.hide_btn):
             b.set_relief(Gtk.ReliefStyle.NONE)
             b.set_focus_on_click(False)
             bar_btns.pack_start(b, False, False, 0)
         bar_btns.show_all()
+        self.update_system()
         self.nb.set_action_widget(bar_btns, Gtk.PackType.END)
         self.update_bar_tooltips()
 
@@ -1377,6 +1452,17 @@ class TermWindow(Gtk.ApplicationWindow):
         # Durante un arrastre se muestra igual, para poder soltar la pestaña en ella.
         self.nb.set_show_tabs(not self.app.config["tabs_hidden"] or bool(self.app.dragging))
         self.refresh_titles()
+
+    def update_system(self):
+        text = self.app.system_text if self.app.config["show_system"] else None
+        if not text:
+            self.sys_label.hide()
+            return
+        if self.sys_label.get_text() != text:
+            self.sys_label.set_text(text)
+        ctx = self.sys_label.get_style_context()
+        (ctx.add_class if self.app.system_hot else ctx.remove_class)("hot")
+        self.sys_label.show()
 
     def update_bar_tooltips(self):
         def tip(text, action):
@@ -1762,6 +1848,8 @@ class PreferencesWindow(Gtk.Window):
         rows = [
             ("show_usage", "Mostrar RAM y CPU en las pestañas",
              "La suma de la shell y de todo lo que corre dentro."),
+            ("show_system", "Mostrar CPU, temperatura y RAM del equipo",
+             "En la barra de pestañas, para todo el equipo."),
             ("autorun_claude", "Reanudar Claude Code solo al restaurar",
              "Si se apaga, el comando queda escrito esperando Enter."),
         ]
@@ -1799,6 +1887,11 @@ class PreferencesWindow(Gtk.Window):
     def set_option(self, key, value):
         self.app.config[key] = value
         self.app.save_config()
+        if key == "show_system":
+            if value:
+                self.app.system_text, self.app.system_hot, self.app._sys_prev = system_sample(None)
+            for w in self.app.windows:
+                w.update_system()
         if key == "show_usage":
             for w in self.app.windows:
                 for t in w.tabs:
@@ -1930,6 +2023,7 @@ class HiloApp(Gtk.Application):
         self.keymap = {}
         self.prefs = None
         self.help_win = None
+        self.system_text, self.system_hot, self._sys_prev = None, False, None
         self.rebuild_keymap()
 
     def do_startup(self):
@@ -1939,6 +2033,8 @@ class HiloApp(Gtk.Application):
             frame.hilo-pane > border { border: none; }
             frame.hilo-pane.multi > border { border: 2px solid alpha(@theme_fg_color, 0.07); }
             frame.hilo-pane.multi.focused > border { border-color: #ff9f5a; }
+            label.hilo-sys { font-size: 0.9em; font-feature-settings: "tnum"; opacity: 0.75; }
+            label.hilo-sys.hot { color: #ff7a59; opacity: 1; }
         """)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -2203,8 +2299,11 @@ class HiloApp(Gtk.Application):
             changed |= p.poll()
         if self.config["show_usage"]:
             self.sample_usage()
+        if self.config["show_system"]:
+            self.system_text, self.system_hot, self._sys_prev = system_sample(self._sys_prev)
         for w in self.windows:
             w.refresh_titles()
+            w.update_system()
         self.save_state()
         return True
 

@@ -75,7 +75,9 @@ Defaults: Ctrl+T or Ctrl+Shift+T new tab (same directory) · Ctrl+Shift+E / O sp
 
 Also: Ctrl+click opens links, double-clicking a tab renames it, and right click opens the menu.
 
-Under *General* you can turn the usage display on tabs on or off, toggle automatic Claude resume, and edit the list of programs that reopen on their own.
+**Whole-system monitor:** at the end of the tab bar Hilo shows CPU use, processor temperature and used / total RAM for the whole computer, for example `CPU 22% · 71°C · 19.0/31.0G`. The temperature turns orange from 85 °C. It reads `/proc` and the kernel's sensors, so it needs nothing extra.
+
+Under *General* you can turn the per-tab usage and the system monitor on or off, toggle automatic Claude resume, and edit the list of programs that reopen on their own.
 
 ![Hilo with the tab bar hidden](docs/screenshots/en/hidden.png)
 
@@ -105,7 +107,7 @@ It uses the font, palette and scrollback of your default GNOME Terminal profile,
 - Settings: `~/.config/hilo/config.json`. Managed from Preferences; it only stores what differs from the defaults.
 
 ```json
-{ "show_usage": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
+{ "show_usage": true, "show_system": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
   "shortcuts": { "new_tab": ["<Control>t"], "close_tab": ["<Control><Shift>w"] } }
 ```
 

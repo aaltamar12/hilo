@@ -73,7 +73,9 @@ Por defecto: Ctrl+T o Ctrl+Shift+T nueva pestaña (en la misma carpeta) · Ctrl+
 
 Además: Ctrl+clic abre enlaces, doble clic en la pestaña la renombra y el clic derecho abre el menú.
 
-En *General* se activan o desactivan el consumo en las pestañas, la reanudación automática de Claude y la lista de programas que se vuelven a abrir solos.
+**Monitor del equipo:** al final de la barra de pestañas Hilo muestra el uso de CPU, la temperatura del procesador y la RAM usada / total de todo el equipo, por ejemplo `CPU 22% · 71°C · 19.0/31.0G`. La temperatura se pone naranja desde 85 °C. Lee `/proc` y los sensores del kernel, así que no necesita nada adicional.
+
+En *General* se activan o desactivan el consumo en las pestañas, el monitor del equipo, la reanudación automática de Claude y la lista de programas que se vuelven a abrir solos.
 
 ![Hilo con la barra de pestañas oculta](docs/screenshots/es/hidden.png)
 
@@ -95,7 +97,7 @@ Usa la fuente, la paleta y el scrollback del perfil por defecto de GNOME Termina
 - Configuración: `~/.config/hilo/config.json`. Se maneja desde Preferencias, y solo guarda lo que cambió respecto a los valores por defecto.
 
 ```json
-{ "show_usage": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
+{ "show_usage": true, "show_system": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
   "shortcuts": { "new_tab": ["<Control>t"], "close_tab": ["<Control><Shift>w"] } }
 ```
 

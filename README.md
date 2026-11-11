@@ -40,8 +40,10 @@ Every tab can be split into panes. Each pane is an independent terminal with its
 - The X on a tab closes the whole tab.
 - Drag the divider to resize.
 - **Drag a tab to turn it into a pane:** grab the tab and drag it over the terminal area. The half of the pane where it will land (left, right, top or bottom, whichever edge is closest) lights up in orange, and when you drop it, it stays there with its shells still running. If the tab had several panes, they all move together. Dragging within the tab bar still reorders tabs.
+- **Onto another tab's panes:** while dragging, hover over another tab for a moment and it opens, so you can drop on its panes.
+- **Move or pull out a pane:** in a tab with several panes, move the mouse to the top edge of a pane and a **⠿ Drag pane** handle shows up. Drop it on another pane (of this tab or another) to put it there, on the tab bar to turn it into its own tab at that spot, or outside any window to open it in a new one.
 - **Between windows:** drop a tab on another window's tab bar to move it there. Drop it on another window's content to make it a pane there. Drop it outside any window to open it in a new window. A window left with no tabs closes itself.
-- **The other way around:** right click → *Move pane to a new tab* pulls it out into its own tab without stopping what's running.
+- **The other way around:** right click → *Move pane to a new tab* pulls it out into its own tab without stopping what's running (also **Ctrl+Shift+D**).
 - A tab with 3 panes shows `▦ 3`. The usage it shows is the sum of all of them; hover to see each pane.
 - Search, copy and paste act on the active pane.
 
@@ -82,7 +84,7 @@ To open without restoring: `hilo --fresh`, or the "Open without restoring" actio
 
 Change them in **Preferences** (Ctrl+, or right click → *Preferences…*), *Shortcuts* tab: click a shortcut and press the new combination. Esc cancels and Backspace leaves it without a shortcut. If another action was using that combination, it's removed from it and you get a notice. The ↺ arrow restores the default.
 
-Defaults: Ctrl+T or Ctrl+Shift+T new tab (same directory) · Ctrl+Shift+E / O split right / down · Alt+arrows switch pane · Ctrl+Shift+X maximize pane · Ctrl+Shift+W close pane · Ctrl+Shift+N new window · Ctrl+Shift+Q close window · Ctrl+Shift+C/V copy/paste · Ctrl+Shift+F search · Ctrl+PgUp/PgDn switch tab · Ctrl+Shift+PgUp/PgDn move tab · Alt+1…9 go to tab (fixed) · Ctrl + / − / 0 zoom · Ctrl+Shift+H hide or show tabs · F11 fullscreen · Ctrl+, preferences · Ctrl+Shift+? shortcuts and controls.
+Defaults: Ctrl+T or Ctrl+Shift+T new tab (same directory) · Ctrl+Shift+E / O split right / down · Alt+arrows switch pane · Ctrl+Shift+X maximize pane · Ctrl+Shift+D move pane to a new tab · Ctrl+Shift+W close pane · Ctrl+Shift+N new window · Ctrl+Shift+Q close window · Ctrl+Shift+C/V copy/paste · Ctrl+Shift+F search · Ctrl+PgUp/PgDn switch tab · Ctrl+Shift+PgUp/PgDn move tab · Alt+1…9 go to tab (fixed) · Ctrl + / − / 0 zoom · Ctrl+Shift+H hide or show tabs · F11 fullscreen · Ctrl+, preferences · Ctrl+Shift+? shortcuts and controls.
 
 **Tab bar buttons:** **+** opens a new tab, the gear opens Preferences, and the keyboard shows every current shortcut plus the mouse gestures. **Hidden tabs:** the eye button hides the whole bar, buttons included. To bring it back: Ctrl+Shift+H, or right click → *Show tabs*. With the bar hidden everything still works from the keyboard, and the window title shows which tab you're on, for example `[2/5]`. This is remembered across restarts.
 

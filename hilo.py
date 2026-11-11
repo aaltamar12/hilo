@@ -248,6 +248,14 @@ EN = {
     "texto": "text",
     "Hilo no está abierta.": "Hilo is not running.",
     "Listo: Hilo se actualizó sin cerrar nada.": "Done: Hilo updated without closing anything.",
+    # arrastrar paneles
+    "Arrastrar panel": "Drag pane",
+    "Suéltelo en otro panel, en la barra de pestañas o fuera de la ventana":
+        "Drop it on another pane, on the tab bar or outside the window",
+    "Llevarla a los paneles de otra pestaña": "Take it to another tab's panes",
+    "Arrastrarla y esperar sobre esa pestaña": "Drag it and hover over that tab",
+    "Sacar un panel o cambiarlo de lugar": "Pull a pane out or move it",
+    "Arrastrar el asa ⠿ que aparece arriba del panel": "Drag the ⠿ handle at the top of the pane",
     # lectura en voz alta
     "Lectura en voz alta": "Read aloud",
     "Abrir la lectura en voz alta": "Open read aloud",
@@ -315,7 +323,7 @@ ACTIONS = [
     ("split_down", T("Dividir panel hacia abajo"), ["<Control><Shift>o"]),
     ("close_pane", T("Cerrar panel (o la pestaña si es el único)"), ["<Control><Shift>w"]),
     ("zoom_pane", T("Maximizar / restaurar panel"), ["<Control><Shift>x"]),
-    ("detach_pane", T("Mover panel a una pestaña nueva"), []),
+    ("detach_pane", T("Mover panel a una pestaña nueva"), ["<Control><Shift>d"]),
     ("focus_left", T("Ir al panel de la izquierda"), ["<Alt>Left"]),
     ("focus_right", T("Ir al panel de la derecha"), ["<Alt>Right"]),
     ("focus_up", T("Ir al panel de arriba"), ["<Alt>Up"]),
@@ -363,6 +371,8 @@ HELP_FIXED = [
     (T("Menú del panel"), T("Clic derecho")),
     (T("Renombrar pestaña"), T("Doble clic en la pestaña")),
     (T("Volver una pestaña panel"), T("Arrastrar la pestaña sobre la terminal")),
+    (T("Llevarla a los paneles de otra pestaña"), T("Arrastrarla y esperar sobre esa pestaña")),
+    (T("Sacar un panel o cambiarlo de lugar"), T("Arrastrar el asa ⠿ que aparece arriba del panel")),
     (T("Pasar una pestaña a otra ventana"), T("Arrastrarla a la otra ventana")),
     (T("Abrir una pestaña en ventana nueva"), T("Soltarla fuera de toda ventana")),
     (T("Cambiar el tamaño de los paneles"), T("Arrastrar la línea divisoria")),
@@ -1568,7 +1578,37 @@ class Pane:
         # El marco solo se ve con varios paneles: resalta el que tiene el foco.
         self.widget = Gtk.Frame(shadow_type=Gtk.ShadowType.NONE)
         self.widget.get_style_context().add_class("hilo-pane")
-        self.widget.add(inner)
+        # Asa para arrastrar el panel: aparece al acercar el mouse al borde de arriba,
+        # solo si la pestaña tiene varios paneles.
+        self.grip = Gtk.EventBox(halign=Gtk.Align.END, valign=Gtk.Align.START, margin_top=4, margin_end=22)
+        self.grip.set_visible_window(False)
+        grip_label = Gtk.Label(label="⠿  " + T("Arrastrar panel"))
+        grip_label.get_style_context().add_class("hilo-grip")
+        self.grip.add(grip_label)
+        self.grip.set_tooltip_text(T("Suéltelo en otro panel, en la barra de pestañas o fuera de la ventana"))
+        self.grip.drag_source_set(Gdk.ModifierType.BUTTON1_MASK, [PANE_TARGET], Gdk.DragAction.MOVE)
+        self.grip.drag_source_set_icon_name("utilities-terminal-symbolic")
+        self.grip.connect("drag-begin", lambda *_: self.app.pane_drag_begin(self))
+        self.grip.connect("drag-data-get", lambda _w, _c, data, *_: data.set_text(self.id, -1))
+        self.grip.connect("drag-failed", self.on_grip_failed)
+        self.grip.connect("drag-end", lambda *_: self.app.pane_drag_end())
+        self.grip.connect("enter-notify-event", lambda *_: self.set_grip(True, hover=True))
+        self.grip.connect("leave-notify-event", lambda *_: self.set_grip(False, hover=False))
+        self.grip.connect("realize", lambda w: w.get_window().set_cursor(
+            Gdk.Cursor.new_from_name(w.get_display(), "grab")))
+        self.grip_hover = False
+        self.grip_on = False
+        t.connect("motion-notify-event", self.on_motion)
+        t.connect("leave-notify-event", lambda *_: self.set_grip(False) or False)
+        # Siempre está puesta, pero invisible y dejando pasar los clics hasta que se acerca el
+        # mouse: una capa del Overlay que se muestra después no recibe eventos (GTK no muestra
+        # su ventana), así que solo se cambia su opacidad y si deja pasar los clics.
+        self.grip_overlay = overlay = Gtk.Overlay()
+        overlay.add(inner)
+        overlay.add_overlay(self.grip)
+        overlay.set_overlay_pass_through(self.grip, True)
+        self.grip.set_opacity(0)
+        self.widget.add(overlay)
         self.widget.show_all()
 
         self.relevo = saved.get("relevo")   # terminal viva heredada de la versión anterior
@@ -1901,6 +1941,28 @@ class Pane:
                 term.event(e)
         return True
 
+    def on_motion(self, _term, event):
+        self.set_grip(event.y < 30)
+        return False
+
+    def set_grip(self, show, hover=None):
+        if hover is not None:
+            self.grip_hover = hover
+        multi = len(self.tab.panes) > 1 and not self.tab.zoomed
+        visible = multi and (show or self.grip_hover or self.app.dragging_pane is self)
+        if visible != self.grip_on:
+            self.grip_on = visible
+            self.grip.set_opacity(1 if visible else 0)
+            self.grip_overlay.set_overlay_pass_through(self.grip, not visible)
+        return False
+
+    def on_grip_failed(self, _w, _ctx, result):
+        # Soltado fuera de toda ventana: el panel se va a una ventana nueva.
+        if result == Gtk.DragResult.NO_TARGET:
+            GLib.idle_add(lambda: self.app.pane_to_new_window(self) and False)
+            return True
+        return False
+
     def request_close(self):
         """Cierra solo este panel (si es el único, se cierra la pestaña)."""
         if self.foreground_running() and not self.win.confirm(
@@ -1922,6 +1984,7 @@ class Pane:
 
 PANED_RATIOS = {}   # Gtk.Paned -> proporción; también mantiene viva la referencia
 TAB_TARGET = Gtk.TargetEntry.new("GTK_NOTEBOOK_TAB", Gtk.TargetFlags.SAME_APP, 0)
+PANE_TARGET = Gtk.TargetEntry.new("HILO_PANE", Gtk.TargetFlags.SAME_APP, 1)
 
 class Tab:
     def __init__(self, win, saved=None, adopt=None):
@@ -1959,7 +2022,7 @@ class Tab:
         self.widget.add(self.box)
         self.widget.add_overlay(self.dropzone)
         self.widget.set_overlay_pass_through(self.dropzone, True)
-        self.widget.drag_dest_set(Gtk.DestDefaults(0), [TAB_TARGET], Gdk.DragAction.MOVE)
+        self.widget.drag_dest_set(Gtk.DestDefaults(0), [TAB_TARGET, PANE_TARGET], Gdk.DragAction.MOVE)
         self.widget.connect("drag-motion", self.on_drag_motion)
         self.widget.connect("drag-leave", lambda *_: self.set_drop(None))
         self.widget.connect("drag-drop", self.on_drag_drop)
@@ -2120,18 +2183,21 @@ class Tab:
         self.replace_child(grand, paned, sibling)
         PANED_RATIOS.pop(paned, None)
 
-    def detach_pane(self, pane):
-        """Mueve el panel a una pestaña nueva, con su shell viva."""
+    def detach_pane(self, pane, win=None, pos=None):
+        """Mueve el panel a una pestaña nueva (en `win`, en la posición `pos`), con su shell viva."""
         if len(self.panes) < 2 or pane not in self.panes:
             return
+        win = win or self.win
         self.unzoom()
         self.unlink(pane)
         if self.focused is pane:
             self.focused = self.leaf_order()[0]
-        tab = Tab(self.win, adopt=pane)
-        self.win.nb.set_current_page(self.win.add_tab(tab, after_current=True, start=False))
+        tab = Tab(win, adopt=pane)
+        win.nb.set_current_page(win.add_tab(tab, after_current=pos is None, start=False, pos=pos))
+        win.present()
         GLib.idle_add(lambda: pane.term.grab_focus() and False)
-        self.win.refresh_titles()
+        for w in {self.win, win}:
+            w.refresh_titles()
         self.app.request_save()
 
     def dock(self, src, target, side):
@@ -2165,10 +2231,10 @@ class Tab:
         self.app.request_save()
 
     # -- soltar una pestaña arrastrada sobre esta
-    def drop_target(self, x, y):
+    def drop_target(self, x, y, exclude=None):
         best = None
         for p in self.panes:
-            if not p.widget.get_mapped():
+            if p is exclude or not p.widget.get_mapped():
                 continue
             x1, y1, x2, y2 = self.rect(p)
             if x1 <= x <= x2 and y1 <= y <= y2:
@@ -2206,25 +2272,55 @@ class Tab:
         return False
 
     def on_drag_motion(self, widget, ctx, x, y, time_):
-        src = self.app.dragging
-        if src is None or src is self or widget.drag_dest_find_target(ctx, None) is None:
+        src, pane = self.app.dragging, self.app.dragging_pane
+        if (pane is None and (src is None or src is self)) or widget.drag_dest_find_target(ctx, None) is None:
             self.set_drop(None)
             Gdk.drag_status(ctx, 0, time_)
             return False
-        self.set_drop(self.drop_target(x, y))
+        self.set_drop(self.drop_target(x, y, exclude=pane))
         Gdk.drag_status(ctx, Gdk.DragAction.MOVE if self.drop else 0, time_)
         return True
 
     def on_drag_drop(self, _w, ctx, x, y, time_):
-        src, drop = self.app.dragging, self.drop_target(x, y)
+        src, pane = self.app.dragging, self.app.dragging_pane
+        drop = self.drop_target(x, y, exclude=pane)
         self.set_drop(None)
-        ok = src is not None and src is not self and drop is not None
+        ok = drop is not None and (pane is not None or (src is not None and src is not self))
         Gtk.drag_finish(ctx, ok, False, time_)
-        if ok:
+        if ok and pane is not None:
+            GLib.timeout_add(100, lambda: self.move_pane_here(pane, drop[0], drop[1]) and False)
+        elif ok:
             # El cuaderno todavía está terminando el arrastre: se mueve después.
             self.app.pending_dock = (self, src, drop[0], drop[1])
             GLib.timeout_add(150, self.app.run_pending_dock)
         return True
+
+    def move_pane_here(self, pane, target, side):
+        """Saca `pane` de su pestaña (de esta o de otra) y lo pone junto a `target`."""
+        src = pane.tab
+        if pane is target or target not in self.panes or pane not in src.panes or len(src.panes) < 2:
+            return
+        src.unzoom()
+        self.unzoom()
+        src.unlink(pane)
+        if src.focused is pane:
+            src.focused = src.leaf_order()[0]
+        pane.tab = self
+        parent = target.widget.get_parent()
+        paned = self.new_paned("h" if side in ("left", "right") else "v", 0.5)
+        self.replace_child(parent, target.widget, paned)
+        first, second = (pane.widget, target.widget) if side in ("left", "top") else (target.widget, pane.widget)
+        paned.pack1(first, True, False)
+        paned.pack2(second, True, False)
+        paned.show_all()
+        self.panes.append(pane)
+        self.focused = pane
+        self.win.nb.set_current_page(self.win.nb.page_num(self.widget))
+        self.win.present()
+        GLib.idle_add(lambda: pane.term.grab_focus() and False)
+        for w in {src.win, self.win}:
+            w.refresh_titles()
+        self.app.request_save()
 
     # -- foco y navegación
     def current_pane(self):
@@ -2370,6 +2466,12 @@ class TermWindow(Gtk.ApplicationWindow):
         self.nb.connect("create-window", self.on_create_window)
         self.nb.connect("switch-page", self.on_switch_page)
         self.nb.connect("page-reordered", lambda *_: self.app.request_save())
+        # Al arrastrar, quedarse un momento sobre otra pestaña la abre, para soltar en sus paneles.
+        self.spring = None          # (pestaña, id del temporizador)
+        self.nb.connect("drag-motion", self.on_nb_drag_motion)
+        self.nb.connect("drag-leave", lambda *_: self.cancel_spring())
+        self.nb.connect("drag-drop", self.on_nb_drag_drop)
+        self.nb.drag_dest_get_target_list().add(Gdk.Atom.intern("HILO_PANE", False), Gtk.TargetFlags.SAME_APP, 1)
         # Botones al final de la barra: nueva pestaña y ocultar la barra.
         self.plus_btn = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.MENU)
         self.plus_btn.connect("clicked", lambda *_: self.new_tab())
@@ -2458,9 +2560,10 @@ class TermWindow(Gtk.ApplicationWindow):
         return [by_widget[self.nb.get_nth_page(i)] for i in range(self.nb.get_n_pages())
                 if self.nb.get_nth_page(i) in by_widget]
 
-    def add_tab(self, tab, after_current=False, start=True):
+    def add_tab(self, tab, after_current=False, start=True, pos=None):
         self.tabs.append(tab)
-        pos = self.nb.get_current_page() + 1 if after_current else -1
+        if pos is None:
+            pos = self.nb.get_current_page() + 1 if after_current else -1
         idx = self.nb.insert_page(tab.widget, tab.tab_box, pos)
         self.nb.set_tab_reorderable(tab.widget, True)
         self.nb.child_set_property(tab.widget, "tab-expand", True)
@@ -2480,6 +2583,62 @@ class TermWindow(Gtk.ApplicationWindow):
         # Al tomarla, GTK la muestra; se vuelve a la anterior para soltarla encima.
         if prev in self.tabs and prev is not self.app.dragging:
             GLib.idle_add(lambda: self.nb.set_current_page(self.nb.page_num(prev.widget)) and False)
+
+    def tab_at(self, x, y):
+        """La pestaña cuya etiqueta está en (x, y), en coordenadas del cuaderno."""
+        for t in self.tabs:
+            if not t.tab_box.get_mapped():
+                continue
+            pos = t.tab_box.translate_coordinates(self.nb, 0, 0)
+            a = t.tab_box.get_allocation()
+            if pos and pos[0] - 6 <= x <= pos[0] + a.width + 6 and pos[1] - 6 <= y <= pos[1] + a.height + 6:
+                return t
+        return None
+
+    def on_nb_drag_motion(self, _nb, _ctx, x, y, _time):
+        src = self.app.dragging or self.app.dragging_pane
+        hover = self.tab_at(x, y) if src is not None else None
+        if hover is None or hover is src or hover is self.current():
+            self.cancel_spring()
+        elif not self.spring or self.spring[0] is not hover:
+            self.cancel_spring()
+            self.spring = (hover, GLib.timeout_add(450, self.spring_open, hover))
+        if self.app.dragging_pane is not None:
+            Gdk.drag_status(_ctx, Gdk.DragAction.MOVE if self.in_tab_bar(y) else 0, _time)
+            return True
+        return False    # GTK sigue con lo suyo (reordenar al soltar sobre la barra)
+
+    def in_tab_bar(self, y):
+        page = self.nb.get_nth_page(self.nb.get_current_page())
+        pos = page.translate_coordinates(self.nb, 0, 0) if page else None
+        return pos is not None and y < pos[1]
+
+    def on_nb_drag_drop(self, _nb, ctx, x, y, time_):
+        pane = self.app.dragging_pane
+        if pane is None:
+            return False
+        ok = self.in_tab_bar(y)
+        Gtk.drag_finish(ctx, ok, False, time_)
+        if ok:
+            # Queda en la posición donde se soltó, entre las pestañas.
+            pos = 0
+            for i, t in enumerate(self.ordered_tabs()):
+                tp = t.tab_box.translate_coordinates(self.nb, 0, 0)
+                if tp and x > tp[0] + t.tab_box.get_allocated_width() / 2:
+                    pos = i + 1
+            GLib.timeout_add(100, lambda: pane.tab.detach_pane(pane, self, pos) and False)
+        return True
+
+    def spring_open(self, tab):
+        self.spring = None
+        if tab in self.tabs:
+            self.nb.set_current_page(self.nb.page_num(tab.widget))
+        return False
+
+    def cancel_spring(self):
+        if self.spring:
+            GLib.source_remove(self.spring[1])
+            self.spring = None
 
     def on_tab_drag_end(self, *_):
         GLib.idle_add(self.clear_drag)
@@ -2565,7 +2724,7 @@ class TermWindow(Gtk.ApplicationWindow):
     def update_tabs_visibility(self):
         # La barra se ve siempre (tiene los botones), salvo en el modo oculto.
         # Durante un arrastre se muestra igual, para poder soltar la pestaña en ella.
-        self.nb.set_show_tabs(not self.app.config["tabs_hidden"] or bool(self.app.dragging))
+        self.nb.set_show_tabs(not self.app.config["tabs_hidden"] or bool(self.app.dragging or self.app.dragging_pane))
         self.refresh_titles()
 
     def update_update_btn(self):
@@ -3215,6 +3374,7 @@ class HiloApp(Gtk.Application):
         self.started = False
         self.history = load_history()
         self.dragging = None        # pestaña que se está arrastrando
+        self.dragging_pane = None   # panel que se está arrastrando desde su asa
         self.pending_dock = None
         self.in_transit = {}        # pestañas que GTK está pasando de una ventana a otra
         self.keymap = {}
@@ -3243,6 +3403,8 @@ class HiloApp(Gtk.Application):
             progressbar.hilo-tts trough, progressbar.hilo-tts progress { min-height: 4px; border-radius: 2px; }
             progressbar.hilo-tts progress { background: #ff9f5a; border-color: #ff9f5a; }
             label.hilo-tts-on { color: #ff9f5a; }
+            label.hilo-grip { background: #ff9f5a; color: #1e140e; border-radius: 9px;
+                              padding: 1px 10px; font-size: 0.85em; font-weight: bold; }
         """)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -3411,6 +3573,29 @@ class HiloApp(Gtk.Application):
     def refresh_tab_bars(self):
         for w in self.windows:
             w.update_tabs_visibility()
+
+    def pane_drag_begin(self, pane):
+        self.dragging_pane = pane     # el asa sigue a la vista: ocultarla cortaría el arrastre
+        self.refresh_tab_bars()
+
+    def pane_drag_end(self):
+        pane, self.dragging_pane = self.dragging_pane, None
+        for w in self.windows:
+            w.cancel_spring()
+            w.update_tabs_visibility()
+            for t in w.tabs:
+                t.set_drop(None)
+        if pane:
+            pane.set_grip(False, hover=False)
+
+    def pane_to_new_window(self, pane):
+        if pane.tab not in pane.win.tabs or len(pane.tab.panes) < 2:
+            return
+        w, h = pane.win.get_size()
+        win = self.spawn_window({"width": w, "height": h}, empty=True)
+        ptr = Gdk.Display.get_default().get_default_seat().get_pointer().get_position()
+        win.move(max(ptr[1] - 40, 0), max(ptr[2] - 20, 0))
+        pane.tab.detach_pane(pane, win, 0)
 
     def run_pending_dock(self):
         if self.pending_dock:

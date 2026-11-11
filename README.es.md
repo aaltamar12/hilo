@@ -40,8 +40,10 @@ Cada pestaña se puede dividir en varios paneles. Cada panel es una terminal ind
 - La X de la pestaña cierra la pestaña completa.
 - Para cambiar el tamaño, arrastre la línea divisoria.
 - **Arrastrar una pestaña para volverla panel:** tome la pestaña y arrástrela sobre el área de terminal. Se marca en naranja la mitad del panel donde va a caer (izquierda, derecha, arriba o abajo, según el borde más cercano), y al soltar queda ahí con sus shells vivas. Si la pestaña tenía varios paneles, se mueven todos juntos. Arrastrar dentro de la barra de pestañas sigue sirviendo para reordenarlas.
+- **Hacia los paneles de otra pestaña:** mientras arrastra, espere un momento sobre otra pestaña y se abre, para soltar en sus paneles.
+- **Mover o sacar un panel:** en una pestaña con varios paneles, acerque el mouse al borde de arriba de un panel y aparece el asa **⠿ Arrastrar panel**. Suéltela en otro panel (de esta pestaña o de otra) para ponerlo ahí, en la barra de pestañas para volverlo una pestaña propia en ese lugar, o fuera de toda ventana para abrirlo en una nueva.
 - **Entre ventanas:** si la suelta en la barra de pestañas de otra ventana, pasa a esa ventana. Si la suelta sobre el contenido de otra ventana, queda como panel allí. Si la suelta fuera de toda ventana, se abre en una ventana nueva. Una ventana que se queda sin pestañas se cierra sola.
-- **Lo inverso:** clic derecho → *Mover panel a una pestaña nueva* lo saca a su propia pestaña, sin cerrar lo que está corriendo.
+- **Lo inverso:** clic derecho → *Mover panel a una pestaña nueva* lo saca a su propia pestaña, sin cerrar lo que está corriendo (también **Ctrl+Shift+D**).
 - En la pestaña aparece `▦ 3` cuando tiene 3 paneles. El consumo que muestra es la suma de todos, y el detalle por panel sale al pasar el mouse.
 - La búsqueda, la copia y el pegado actúan sobre el panel activo.
 
@@ -82,7 +84,7 @@ Para abrir sin restaurar: `hilo --fresh`, o la acción «Abrir sin restaurar» e
 
 Se cambian en **Preferencias** (Ctrl+, o clic derecho → Preferencias…), pestaña *Atajos*: haga clic en el atajo y presione la combinación nueva. Esc cancela y Retroceso lo deja sin atajo. Si la combinación ya la usaba otra acción, se le quita y aparece un aviso. La flecha ↺ vuelve al atajo original.
 
-Por defecto: Ctrl+T o Ctrl+Shift+T nueva pestaña (en la misma carpeta) · Ctrl+Shift+E / O dividir a la derecha / abajo · Alt+flechas cambiar de panel · Ctrl+Shift+X maximizar panel · Ctrl+Shift+W cerrar panel · Ctrl+Shift+N nueva ventana · Ctrl+Shift+Q cerrar ventana · Ctrl+Shift+C/V copiar/pegar · Ctrl+Shift+F buscar · Ctrl+RePág/AvPág cambiar de pestaña · Ctrl+Shift+RePág/AvPág mover pestaña · Alt+1…9 ir a pestaña (fijo) · Ctrl + / − / 0 zoom · Ctrl+Shift+H ocultar o mostrar las pestañas · F11 pantalla completa · Ctrl+, preferencias · Ctrl+Shift+? atajos y controles.
+Por defecto: Ctrl+T o Ctrl+Shift+T nueva pestaña (en la misma carpeta) · Ctrl+Shift+E / O dividir a la derecha / abajo · Alt+flechas cambiar de panel · Ctrl+Shift+X maximizar panel · Ctrl+Shift+D mover panel a una pestaña nueva · Ctrl+Shift+W cerrar panel · Ctrl+Shift+N nueva ventana · Ctrl+Shift+Q cerrar ventana · Ctrl+Shift+C/V copiar/pegar · Ctrl+Shift+F buscar · Ctrl+RePág/AvPág cambiar de pestaña · Ctrl+Shift+RePág/AvPág mover pestaña · Alt+1…9 ir a pestaña (fijo) · Ctrl + / − / 0 zoom · Ctrl+Shift+H ocultar o mostrar las pestañas · F11 pantalla completa · Ctrl+, preferencias · Ctrl+Shift+? atajos y controles.
 
 **Botones de la barra:** **+** abre una pestaña nueva, el engranaje abre Preferencias y el teclado muestra todos los atajos vigentes y los gestos con el mouse. **Pestañas ocultas:** el botón del ojo oculta la barra completa, botones incluidos. Para volver a verla: Ctrl+Shift+H, o clic derecho → *Mostrar las pestañas*. Con la barra oculta todo sigue funcionando con el teclado, y el título de la ventana dice en qué pestaña va, por ejemplo `[2/5]`. Se recuerda al reabrir.
 

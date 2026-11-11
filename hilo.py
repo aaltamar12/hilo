@@ -881,7 +881,12 @@ class Tab:
         leaves = self.leaf_order()
         self.focused = leaves[focus_idx] if 0 <= focus_idx < len(leaves) else leaves[0]
 
-        self.label = Gtk.Label(label="…", ellipsize=Pango.EllipsizeMode.END, width_chars=12, max_width_chars=28)
+        # Todas las pestañas piden el mismo ancho natural (el título no cuenta y el
+        # consumo tiene ancho fijo), así la barra se reparte por igual y ninguna
+        # cambia de tamaño cuando cambian el título o las cifras. El título usa
+        # todo el espacio que le toque y solo se corta si no cabe.
+        self.label = Gtk.Label(label="…", ellipsize=Pango.EllipsizeMode.END, width_chars=1,
+                               max_width_chars=1, hexpand=True)
         self.count_label = Gtk.Label()
         self.count_label.get_style_context().add_class("dim-label")
         close = Gtk.Button.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU)
@@ -889,8 +894,9 @@ class Tab:
         close.set_focus_on_click(False)
         close.set_tooltip_text("Cerrar pestaña (todos sus paneles)")
         close.connect("clicked", lambda *_: self.request_close())
-        self.usage_label = Gtk.Label(xalign=1)
+        self.usage_label = Gtk.Label(xalign=1, ellipsize=Pango.EllipsizeMode.END, width_chars=13, max_width_chars=13)
         self.usage_label.get_style_context().add_class("dim-label")
+        self.usage_label.get_style_context().add_class("hilo-usage")
         self.tab_box = Gtk.Box(spacing=4)
         inner = Gtk.Box(spacing=6)
         inner.pack_start(self.label, True, True, 0)
@@ -1350,6 +1356,7 @@ class TermWindow(Gtk.ApplicationWindow):
         pos = self.nb.get_current_page() + 1 if after_current else -1
         idx = self.nb.insert_page(tab.widget, tab.tab_box, pos)
         self.nb.set_tab_reorderable(tab.widget, True)
+        self.nb.child_set_property(tab.widget, "tab-expand", True)
         self.nb.set_tab_detachable(tab.widget, True)
         self.update_tabs_visibility()
         if start:
@@ -1405,6 +1412,7 @@ class TermWindow(Gtk.ApplicationWindow):
         tab.win = self
         self.tabs.append(tab)
         self.nb.set_tab_reorderable(child, True)
+        self.nb.child_set_property(child, "tab-expand", True)
         self.nb.set_tab_detachable(child, True)
         self.update_tabs_visibility()
         self.nb.set_current_page(n)
@@ -1482,23 +1490,21 @@ class TermWindow(Gtk.ApplicationWindow):
                 (ctx.add_class if multi else ctx.remove_class)("multi")
                 (ctx.add_class if p is cur else ctx.remove_class)("focused")
             title = t.title()
-            if t.label.get_text() != title:
-                t.label.set_text(title)
             n = len(t.panes)
-            if n > 1:
-                t.count_label.set_markup(f"<small>{'⤢ ' if t.zoomed else ''}▦ {n}</small>")
-                t.count_label.show()
-            else:
-                t.count_label.hide()
+            shown = (f"{'⤢ ' if t.zoomed else ''}▦ {n}   " if n > 1 else "") + title
+            if t.label.get_text() != shown:
+                t.label.set_text(shown)
             tip = title + (f"\n{n} paneles" if n > 1 else "")
             if t.usage:
                 ram, cpu, detail = t.usage
                 text = f"{fmt_mem(ram)} · {fmt_cpu(cpu)}"
-                t.usage_label.set_markup(f"<small>{GLib.markup_escape_text(text)}</small>")
-                t.usage_label.show()
+                if t.usage_label.get_text() != text:
+                    t.usage_label.set_text(text)
                 tip = f"{tip}\n\n{detail}"
             else:
-                t.usage_label.hide()
+                t.usage_label.set_text("")
+            # Visible u oculto en todas por igual, para que midan lo mismo.
+            t.usage_label.set_visible(bool(self.app.config["show_usage"]))
             if t.tab_box.get_tooltip_text() != tip:
                 t.tab_box.set_tooltip_text(tip)
         cur = self.current()
@@ -2035,6 +2041,7 @@ class HiloApp(Gtk.Application):
             frame.hilo-pane > border { border: none; }
             frame.hilo-pane.multi > border { border: 2px solid alpha(@theme_fg_color, 0.07); }
             frame.hilo-pane.multi.focused > border { border-color: #ff9f5a; }
+            label.hilo-usage { font-size: 0.82em; font-feature-settings: "tnum"; }
             label.hilo-sys { font-size: 0.9em; font-feature-settings: "tnum"; opacity: 0.75; }
             label.hilo-sys.hot { color: #ff7a59; opacity: 1; }
         """)

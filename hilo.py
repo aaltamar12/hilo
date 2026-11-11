@@ -1703,7 +1703,9 @@ class TermWindow(Gtk.ApplicationWindow):
             "focus_down": lambda: tab and tab.focus_dir("down"),
             "close_tab": lambda: tab and tab.request_close(),
             "close_window": self.on_delete,
-            "copy": lambda: pane and pane.term.copy_clipboard_format(Vte.Format.TEXT),
+            # Sin selección propia no se toca el portapapeles: VTE lo dejaría vacío y se
+            # perdería lo que copió el programa (Claude a pantalla completa copia solo).
+            "copy": lambda: pane and pane.term.get_has_selection() and pane.term.copy_clipboard_format(Vte.Format.TEXT),
             "paste": lambda: pane and pane.term.paste_clipboard(),
             "search": self.open_search,
             "next_tab": lambda: self.cycle(1),

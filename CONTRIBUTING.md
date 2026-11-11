@@ -93,8 +93,12 @@ python3 -m py_compile hilo.py
 
 ## Proponer un cambio
 
-1. Cree una rama desde `main`.
+1. Haga un fork del repositorio y cree una rama desde `main`.
 2. Haga el cambio y pruébelo como se describe arriba.
 3. Abra un pull request explicando qué cambió, por qué y cómo lo probó.
+
+`main` está protegida: los cambios solo entran por pull request, con la aprobación del mantenedor.
+
+Al contribuir, usted acepta que su aporte se publique bajo la licencia MIT del proyecto.
 
 Si encuentra un error, abra un issue con los pasos para reproducirlo y, si aplica, el contenido de `session.json` sin rutas ni datos personales.

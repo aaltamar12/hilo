@@ -1,24 +1,26 @@
-# Cómo contribuir
+# Contributing
 
-Gracias por querer mejorar Hilo. Esta guía explica cómo correrla en desarrollo sin tocar su sesión real, cómo está organizado el código y qué revisar antes de proponer un cambio.
+**English** · [Español](CONTRIBUTING.es.md)
 
-## Requisitos
+Thanks for wanting to improve Hilo. This guide covers how to run it in development without touching your real session, how the code is organized, and what to check before sending a change.
 
-- Linux con GNOME (o cualquier escritorio con GTK 3).
-- Python 3.10 o más reciente.
-- PyGObject con GTK 3 y VTE 2.91. En Ubuntu y Debian:
+## Requirements
+
+- Linux with GNOME (or any GTK 3 desktop).
+- Python 3.10 or newer.
+- PyGObject with GTK 3 and VTE 2.91. On Ubuntu and Debian:
 
 ```sh
 sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91
 ```
 
-No hay más dependencias, ni `pip install`, ni paso de compilación.
+There are no other dependencies: no `pip install`, no build step.
 
-## Correrla en desarrollo
+## Running it in development
 
-Hilo es una aplicación de instancia única: si ya tiene Hilo abierta y ejecuta `./hilo.py`, el proceso nuevo no arranca otra terminal, sino que le pide a la que está abierta que abra una ventana. Además, compartiría la misma sesión guardada.
+Hilo is a single-instance application: if Hilo is already open and you run `./hilo.py`, the new process doesn't start another terminal. Instead, it asks the running one to open a window. It would also share the same saved session.
 
-Para probar cambios sin mezclar nada con su Hilo de todos los días, use otro identificador de aplicación y carpetas temporales:
+To test changes without mixing anything into your everyday Hilo, use a different application id and temporary folders:
 
 ```sh
 export HILO_APP_ID=dev.hilo.Prueba
@@ -27,78 +29,80 @@ export XDG_CONFIG_HOME="$(mktemp -d)"
 ./hilo.py
 ```
 
-- `HILO_APP_ID` hace que la copia de desarrollo sea una aplicación aparte.
-- `XDG_STATE_HOME` aísla la sesión, el texto guardado, el historial de Claude y los paneles cerrados.
-- `XDG_CONFIG_HOME` aísla las preferencias y los atajos.
+- `HILO_APP_ID` makes the development copy a separate application.
+- `XDG_STATE_HOME` isolates the session, saved text, Claude history and closed panes.
+- `XDG_CONFIG_HOME` isolates preferences and shortcuts.
 
-Si quiere conservar la sesión de prueba entre arranques (por ejemplo, para probar la restauración), use una carpeta fija en lugar de `mktemp -d`.
+If you want to keep the test session across restarts (for example, to test restoring), use a fixed folder instead of `mktemp -d`.
 
-`./hilo.py --fresh` abre sin restaurar nada.
+`./hilo.py --fresh` opens without restoring anything.
 
-## Cómo está organizado
+## How it's organized
 
-Todo vive en `hilo.py`, a propósito: se instala con un enlace y no hay paquetes que mantener.
+Everything lives in `hilo.py`, on purpose: it installs with a symlink and there are no packages to maintain.
 
-| Pieza | Qué hace |
+| Piece | What it does |
 |---|---|
-| Funciones sueltas al inicio | Configuración, escritura atómica, lectura de `/proc` (comando, carpeta, consumo) y todo lo de Claude Code (encontrar la sesión, armar el `--resume`). |
-| `Pane` | Una terminal. Arranca la shell, restaura el texto guardado, detecta qué está corriendo y sabe describirse para guardarse. |
-| `Tab` | Una pestaña. Guarda un árbol de paneles (`Gtk.Paned` anidados): dividir, cerrar, mover el foco, maximizar y recibir pestañas arrastradas. |
-| `TermWindow` | Una ventana con su barra de pestañas, la búsqueda, el menú contextual y los atajos. |
-| `PreferencesWindow` | Preferencias: opciones generales y la captura de atajos. |
-| `HiloApp` | La aplicación. Guarda la sesión cada pocos segundos, la restaura al abrir, mide el consumo, lleva el historial de Claude y hace el guardado final al apagar. |
+| Top-level functions | Settings, atomic writes, reading `/proc` (command, directory, usage) and everything related to Claude Code (finding the session, building the `--resume` command). |
+| `Pane` | One terminal. Starts the shell, restores saved text, detects what's running and knows how to describe itself for saving. |
+| `Tab` | One tab. Holds a tree of panes (nested `Gtk.Paned`): split, close, move focus, maximize and accept dragged tabs. |
+| `TermWindow` | A window with its tab bar, search, context menu and shortcuts. |
+| `PreferencesWindow` | Preferences: general options and shortcut capture. |
+| `HelpWindow` | The shortcuts and controls window: current shortcuts, fixed keys and mouse gestures. |
+| `HiloApp` | The application. Saves the session every few seconds, restores it on launch, measures usage, keeps the Claude history and does the final save on shutdown. |
 
-### Formato de la sesión
+### Session format
 
-`session.json` tiene una lista de ventanas, y cada ventana una lista de pestañas. El contenido de cada pestaña es un árbol:
+`session.json` holds a list of windows, and each window a list of tabs. The content of each tab is a tree:
 
 ```json
 { "split": "h", "ratio": 0.5, "children": [
-    { "pane": { "id": "…", "cwd": "/ruta", "command": ["nvim"] } },
-    { "pane": { "id": "…", "cwd": "/ruta", "command": null } }
+    { "pane": { "id": "…", "cwd": "/path", "command": { "argv": ["nvim"] }, "claude_ids": [] } },
+    { "pane": { "id": "…", "cwd": "/path", "command": null, "claude_ids": [] } }
 ] }
 ```
 
-Si cambia este formato, asegúrese de que una sesión guardada con la versión anterior se siga abriendo. Alguien puede actualizar Hilo justo después de un apagón.
+If you change this format, make sure a session saved by the previous version still opens. Someone may update Hilo right after a power cut.
 
-### Reglas que no hay que romper
+### Rules not to break
 
-- **Toda escritura a disco pasa por `atomic_write`.** Un apagón a mitad de una escritura no puede dejar un archivo corrupto.
-- **Nada peligroso se ejecuta solo.** Al restaurar, solo Claude y la lista `autorun` se vuelven a lanzar. Cualquier otro comando queda escrito en el prompt esperando Enter.
-- **El guardado final al apagar no se puede perder.** Si toca el manejo de señales (`SIGTERM`, `SIGHUP`) o el cierre de procesos hijos, pruebe que la sesión siga completa después de un apagado.
-- **Liviana.** Hilo vigila los procesos cada pocos segundos. Nada de trabajo pesado en esos temporizadores.
+- **Every write to disk goes through `atomic_write`.** A power cut in the middle of a write must never leave a corrupt file.
+- **Nothing risky runs on its own.** On restore, only Claude and the `autorun` list are relaunched. Any other command is typed at the prompt and waits for Enter.
+- **The final save on shutdown must not be lost.** If you touch signal handling (`SIGTERM`, `SIGHUP`) or how child processes are closed, check that the session is still complete after a shutdown.
+- **Keep it light.** Hilo watches processes every few seconds. No heavy work in those timers.
 
-## Probar un cambio
+## Testing a change
 
-No hay suite automática todavía. Antes de proponer un cambio, revise a mano lo que tocó, siempre con la copia de desarrollo:
+There's no automated test suite yet. Before sending a change, check what you touched by hand, always with the development copy:
 
-- **Restauración:** abra pestañas y paneles en carpetas distintas, con algo corriendo, y mate el proceso con `kill -9`. Al abrir de nuevo, todo debe volver igual.
-- **Apagado limpio:** ciérrela con `kill -TERM`. La sesión debe quedar guardada con los comandos que estaban corriendo.
-- **Salir a propósito:** escriba `exit` en todas las pestañas. Al abrir de nuevo no debe restaurarse nada.
-- **Paneles y arrastre:** divida, cierre, maximice y arrastre pestañas dentro de la ventana, a otra ventana y fuera de toda ventana.
-- **Atajos:** cambie un atajo en Preferencias, reinicie y compruebe que se mantiene.
+- **Restore:** open tabs and panes in different directories, with something running, and kill the process with `kill -9`. When you open it again, everything should come back the same.
+- **Clean shutdown:** close it with `kill -TERM`. The session should be saved with the commands that were running.
+- **Quitting on purpose:** type `exit` in every tab. When you open it again, nothing should be restored.
+- **Panes and dragging:** split, close, maximize, and drag tabs within the window, to another window and outside any window.
+- **Shortcuts:** change a shortcut in Preferences, restart and check that it sticks.
 
-Como mínimo, el archivo tiene que compilar:
+At the very least, the file has to compile:
 
 ```sh
 python3 -m py_compile hilo.py
 ```
 
-## Convenciones
+## Conventions
 
-- Los textos de la interfaz, los mensajes y el README van en español, en lenguaje natural y tratando de usted.
-- Código claro antes que ingenioso. Los comentarios explican el porqué, no el qué.
-- No agregue dependencias fuera de Python, GTK y VTE sin conversarlo antes.
-- Un cambio por propuesta, con un mensaje de commit que diga qué cambia y para qué.
+- Interface text is in Spanish, in plain natural language, using the formal "usted".
+- Documentation comes in two versions: English (`README.md`, `CONTRIBUTING.md`) and Spanish (`README.es.md`, `CONTRIBUTING.es.md`). If you change one, update the other.
+- Clear code over clever code. Comments explain why, not what.
+- Don't add dependencies beyond Python, GTK and VTE without discussing it first.
+- One change per pull request, with a commit message that says what changes and why.
 
-## Proponer un cambio
+## Sending a change
 
-1. Haga un fork del repositorio y cree una rama desde `main`.
-2. Haga el cambio y pruébelo como se describe arriba.
-3. Abra un pull request explicando qué cambió, por qué y cómo lo probó.
+1. Fork the repository and create a branch from `main`.
+2. Make your change and test it as described above.
+3. Open a pull request explaining what changed, why, and how you tested it.
 
-`main` está protegida: los cambios solo entran por pull request, con la aprobación del mantenedor.
+`main` is protected: changes only go in through pull requests approved by the maintainer.
 
-Al contribuir, usted acepta que su aporte se publique bajo la licencia MIT del proyecto.
+By contributing, you agree that your contribution is published under the project's MIT license.
 
-Si encuentra un error, abra un issue con los pasos para reproducirlo y, si aplica, el contenido de `session.json` sin rutas ni datos personales.
+If you find a bug, open an issue with steps to reproduce it and, if relevant, the contents of `session.json` with paths and personal data removed.

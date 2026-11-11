@@ -95,7 +95,7 @@ Usa la fuente, la paleta y el scrollback del perfil por defecto de GNOME Termina
 
 ## Contribuir
 
-Vea [CONTRIBUTING.md](CONTRIBUTING.md) (en español): cómo correr una copia de desarrollo sin tocar su sesión, cómo está organizado el código y qué probar antes de proponer un cambio.
+Vea [CONTRIBUTING.es.md](CONTRIBUTING.es.md): cómo correr una copia de desarrollo sin tocar su sesión, cómo está organizado el código y qué probar antes de proponer un cambio.
 
 ## Licencia
 

@@ -105,7 +105,7 @@ It uses the font, palette and scrollback of your default GNOME Terminal profile,
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) (in Spanish): how to run a development copy without touching your real session, how the code is organized, and what to test before sending a change.
+See [CONTRIBUTING.md](CONTRIBUTING.md): how to run a development copy without touching your real session, how the code is organized, and what to test before sending a change.
 
 ## License
 

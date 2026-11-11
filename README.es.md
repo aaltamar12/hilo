@@ -4,7 +4,11 @@
 
 Terminal para GNOME basada en VTE, el mismo motor de GNOME Terminal, así que se ve y se comporta igual. Además guarda la sesión en disco todo el tiempo, y si el PC se apaga de golpe la recupera al abrirla otra vez.
 
+![Hilo con tres pestañas y una pestaña dividida en tres paneles](docs/screenshots/es/hero.png)
+
 ## Qué se recupera
+
+![Una pestaña restaurada tras un apagón, con el texto anterior y el último comando esperando](docs/screenshots/es/restore.png)
 
 | Qué | Cada cuánto se guarda |
 |---|---|
@@ -23,6 +27,8 @@ Los procesos en sí no pueden sobrevivir a un corte de luz, porque viven en la R
 
 ## Paneles
 
+![Arrastrando una pestaña sobre un panel](docs/screenshots/es/drag.png)
+
 Cada pestaña se puede dividir en varios paneles. Cada panel es una terminal independiente, con su propia shell, carpeta, comando, texto guardado, consumo y sesión de Claude. Todo se restaura tras un apagón con la misma distribución y proporciones.
 
 - **Ctrl+Shift+E** divide a la derecha y **Ctrl+Shift+O** hacia abajo. El panel nuevo abre en la misma carpeta.
@@ -38,6 +44,8 @@ Cada pestaña se puede dividir en varios paneles. Cada panel es una terminal ind
 - La búsqueda, la copia y el pegado actúan sobre el panel activo.
 
 ## Historial de Claude y paneles cerrados
+
+![Menú con las sesiones anteriores de Claude Code](docs/screenshots/es/claude.png)
 
 Todo esto se conserva aunque cierre la pestaña o la terminal:
 
@@ -66,6 +74,10 @@ Por defecto: Ctrl+T o Ctrl+Shift+T nueva pestaña (en la misma carpeta) · Ctrl+
 Además: Ctrl+clic abre enlaces, doble clic en la pestaña la renombra y el clic derecho abre el menú.
 
 En *General* se activan o desactivan el consumo en las pestañas, la reanudación automática de Claude y la lista de programas que se vuelven a abrir solos.
+
+![Hilo con la barra de pestañas oculta](docs/screenshots/es/hidden.png)
+
+![Ventana de atajos y controles](docs/screenshots/es/help.png)
 
 ## Instalar
 

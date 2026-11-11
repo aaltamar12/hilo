@@ -6,7 +6,11 @@ A GNOME terminal built on VTE, the same engine as GNOME Terminal, so it looks an
 
 The interface is in Spanish for now.
 
+![Hilo with three tabs and a tab split into three panes](docs/screenshots/en/hero.png)
+
 ## What comes back
+
+![A tab restored after a crash, with the old text and the last command waiting](docs/screenshots/en/restore.png)
 
 | What | How often it's saved |
 |---|---|
@@ -25,6 +29,8 @@ Processes themselves can't survive a power cut, because they live in RAM. What H
 
 ## Panes
 
+![Dragging a tab onto a pane](docs/screenshots/en/drag.png)
+
 Every tab can be split into panes. Each pane is an independent terminal with its own shell, directory, command, saved text, resource usage and Claude session. After a crash, everything comes back with the same layout and proportions.
 
 - **Ctrl+Shift+E** splits to the right and **Ctrl+Shift+O** splits down. The new pane opens in the same directory.
@@ -40,6 +46,8 @@ Every tab can be split into panes. Each pane is an independent terminal with its
 - Search, copy and paste act on the active pane.
 
 ## Claude history and closed panes
+
+![Right-click menu with past Claude Code sessions](docs/screenshots/en/claude.png)
 
 All of this survives closing the tab or the terminal:
 
@@ -68,6 +76,10 @@ Defaults: Ctrl+T or Ctrl+Shift+T new tab (same directory) · Ctrl+Shift+E / O sp
 Also: Ctrl+click opens links, double-clicking a tab renames it, and right click opens the menu.
 
 Under *General* you can turn the usage display on tabs on or off, toggle automatic Claude resume, and edit the list of programs that reopen on their own.
+
+![Hilo with the tab bar hidden](docs/screenshots/en/hidden.png)
+
+![Shortcuts and controls window](docs/screenshots/en/help.png)
 
 ## Install
 

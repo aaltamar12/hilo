@@ -1,0 +1,90 @@
+# Hilo
+
+Terminal para GNOME basada en VTE, el mismo motor de GNOME Terminal, así que se ve y se comporta igual. Además guarda la sesión en disco todo el tiempo, y si el PC se apaga de golpe la recupera al abrirla otra vez.
+
+## Qué se recupera
+
+| Qué | Cada cuánto se guarda |
+|---|---|
+| Ventanas, tamaño, pestañas, orden, pestaña activa y nombres personalizados | al cambiar, y cada 2 s |
+| Carpeta de cada pestaña | cada 2 s |
+| Comando que estaba corriendo | cada 2 s |
+| Texto en pantalla (historial de hasta 10 000 líneas) | cada 10 s, solo si cambió |
+
+Al restaurar:
+
+- **Claude Code** se reanuda solo con `claude --resume <id>`, con las mismas banderas (`--dangerously-skip-permissions`, `--model`…). El id sale de `~/.claude/sessions/<pid>.json`.
+- `nvim`, `vim`, `htop`, `btop`, `top`, `less`, `man` y `tail` se vuelven a abrir solos.
+- Cualquier otro comando (`bin/dev`, `npm run dev`, `rails s`…) queda escrito en el prompt esperando Enter, para que nada peligroso se ejecute sin que usted lo vea.
+
+Los procesos en sí no pueden sobrevivir a un corte de luz, porque viven en la RAM. Lo que hace Hilo es reconstruir el entorno.
+
+## Paneles
+
+Cada pestaña se puede dividir en varios paneles. Cada panel es una terminal independiente, con su propia shell, carpeta, comando, texto guardado, consumo y sesión de Claude. Todo se restaura tras un apagón con la misma distribución y proporciones.
+
+- **Ctrl+Shift+E** divide a la derecha y **Ctrl+Shift+O** hacia abajo. El panel nuevo abre en la misma carpeta.
+- **Alt+←↑→↓** pasa de un panel a otro, o se puede hacer clic. El panel activo lleva un borde naranja.
+- **Ctrl+Shift+X** maximiza el panel dentro de la pestaña y lo devuelve a su lugar.
+- **Ctrl+Shift+W** o `exit` cierra el panel y los demás ocupan su espacio. Si era el único, se cierra la pestaña.
+- La X de la pestaña cierra la pestaña completa.
+- Para cambiar el tamaño, arrastre la línea divisoria.
+- **Arrastrar una pestaña para volverla panel:** tome la pestaña y arrástrela sobre el área de terminal. Se marca en naranja la mitad del panel donde va a caer (izquierda, derecha, arriba o abajo, según el borde más cercano), y al soltar queda ahí con sus shells vivas. Si la pestaña tenía varios paneles, se mueven todos juntos. Arrastrar dentro de la barra de pestañas sigue sirviendo para reordenarlas.
+- **Entre ventanas:** si la suelta en la barra de pestañas de otra ventana, pasa a esa ventana. Si la suelta sobre el contenido de otra ventana, queda como panel allí. Si la suelta fuera de toda ventana, se abre en una ventana nueva. Una ventana que se queda sin pestañas se cierra sola. Con varias ventanas abiertas la barra de pestañas se ve siempre, para poder arrastrar también la única pestaña de una ventana.
+- **Lo inverso:** clic derecho → *Mover panel a una pestaña nueva* lo saca a su propia pestaña, sin cerrar lo que está corriendo.
+- En la pestaña aparece `▦ 3` cuando tiene 3 paneles. El consumo que muestra es la suma de todos, y el detalle por panel sale al pasar el mouse.
+- La búsqueda, la copia y el pegado actúan sobre el panel activo.
+
+## Historial de Claude y paneles cerrados
+
+Todo esto se conserva aunque cierre la pestaña o la terminal:
+
+- **Sesiones de Claude:** cada sesión que corre en Hilo queda registrada (las últimas 300) con su carpeta, sus banderas, la hora y el primer mensaje que usted escribió, para reconocerla. Para reanudar una, use clic derecho → *Sesiones de Claude*, que la abre en una pestaña nueva en su carpeta, o en la consola `hilo --historial`, que imprime `cd … && claude … --resume <id>` listo para copiar.
+- **Paneles cerrados:** al cerrar un panel o una pestaña se guardan el texto, la carpeta y las sesiones de Claude de cada panel (los últimos 40). Para reabrirlo con el texto de antes, use clic derecho → *Paneles cerrados*, o en la consola `hilo --cerradas`.
+
+Solo se registran las sesiones abiertas desde Hilo, no las de GNOME Terminal. Para esas siempre queda `claude --resume`, que las lista todas.
+
+## Cuándo se olvida una pestaña
+
+- Escribir `exit`, Ctrl+Shift+W o la X de la pestaña: sale de la sesión, pero queda en *Paneles cerrados*.
+- Cerrar la **última ventana** con la X: se recuerda y vuelve la próxima vez.
+- Cerrar una ventana cuando hay otras abiertas: se olvida esa ventana.
+- Apagado, cierre de sesión o corte de luz: se recuerda.
+
+Para abrir sin restaurar: `hilo --fresh`, o la acción «Abrir sin restaurar» en el menú del icono.
+
+## Atajos
+
+Se cambian en **Preferencias** (Ctrl+, o clic derecho → Preferencias…), pestaña *Atajos*: haga clic en el atajo y presione la combinación nueva. Esc cancela y Retroceso lo deja sin atajo. Si la combinación ya la usaba otra acción, se le quita y aparece un aviso. La flecha ↺ vuelve al atajo original.
+
+Por defecto: Ctrl+T o Ctrl+Shift+T nueva pestaña (en la misma carpeta) · Ctrl+Shift+E / O dividir a la derecha / abajo · Alt+flechas cambiar de panel · Ctrl+Shift+X maximizar panel · Ctrl+Shift+W cerrar panel · Ctrl+Shift+N nueva ventana · Ctrl+Shift+Q cerrar ventana · Ctrl+Shift+C/V copiar/pegar · Ctrl+Shift+F buscar · Ctrl+RePág/AvPág cambiar de pestaña · Ctrl+Shift+RePág/AvPág mover pestaña · Alt+1…9 ir a pestaña (fijo) · Ctrl + / − / 0 zoom · F11 pantalla completa · Ctrl+, preferencias.
+
+Además: Ctrl+clic abre enlaces, doble clic en la pestaña la renombra y el clic derecho abre el menú.
+
+En *General* se activan o desactivan el consumo en las pestañas, la reanudación automática de Claude y la lista de programas que se vuelven a abrir solos.
+
+## Instalar
+
+```sh
+./install.sh              # comando `hilo` + acceso en el menú
+./install.sh --autostart  # además la abre al iniciar sesión
+./install.sh --uninstall
+```
+
+Usa la fuente, la paleta y el scrollback del perfil por defecto de GNOME Terminal, y los colores del tema del sistema.
+
+## Archivos
+
+- Sesión: `~/.local/state/hilo/session.json` y `~/.local/state/hilo/scroll/<pestaña>.txt`. Historial: `claude-historial.json` y `cerradas/`, en la misma carpeta. Se escriben de forma atómica (archivo temporal, fsync y rename), así un apagón nunca deja un archivo a medias.
+- Configuración: `~/.config/hilo/config.json`. Se maneja desde Preferencias, y solo guarda lo que cambió respecto a los valores por defecto.
+
+```json
+{ "show_usage": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
+  "shortcuts": { "new_tab": ["<Control>t"], "close_tab": ["<Control><Shift>w"] } }
+```
+
+## Límites conocidos
+
+- El texto restaurado vuelve sin colores, porque VTE 0.68 solo exporta texto plano.
+- Lo que había en pantalla completa (vim, top) no se guarda como texto. El programa simplemente se vuelve a abrir.
+- Se pierden como mucho los últimos ~2 s de cambios de pestañas y ~10 s de texto.

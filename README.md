@@ -1,100 +1,112 @@
 # Hilo
 
-Terminal para GNOME basada en VTE, el mismo motor de GNOME Terminal, así que se ve y se comporta igual. Además guarda la sesión en disco todo el tiempo, y si el PC se apaga de golpe la recupera al abrirla otra vez.
+**English** · [Español](README.es.md)
 
-## Qué se recupera
+A GNOME terminal built on VTE, the same engine as GNOME Terminal, so it looks and behaves the same. On top of that it keeps saving your session to disk, and if your computer shuts down unexpectedly, everything comes back the next time you open it.
 
-| Qué | Cada cuánto se guarda |
+The interface is in Spanish for now.
+
+## What comes back
+
+| What | How often it's saved |
 |---|---|
-| Ventanas, tamaño, pestañas, orden, pestaña activa y nombres personalizados | al cambiar, y cada 2 s |
-| Carpeta de cada pestaña | cada 2 s |
-| Comando que estaba corriendo | cada 2 s |
-| Texto en pantalla (historial de hasta 10 000 líneas) | cada 10 s, solo si cambió |
+| Windows, size, tabs, order, active tab and custom tab names | on every change, and every 2 s |
+| Working directory of each tab | every 2 s |
+| The command that was running | every 2 s |
+| Text on screen (up to 10,000 lines of scrollback) | every 10 s, only if it changed |
 
-Al restaurar:
+On restore:
 
-- **Claude Code** se reanuda solo con `claude --resume <id>`, con las mismas banderas (`--dangerously-skip-permissions`, `--model`…). El id sale de `~/.claude/sessions/<pid>.json`.
-- `nvim`, `vim`, `htop`, `btop`, `top`, `less`, `man` y `tail` se vuelven a abrir solos.
-- Cualquier otro comando (`bin/dev`, `npm run dev`, `rails s`…) queda escrito en el prompt esperando Enter, para que nada peligroso se ejecute sin que usted lo vea.
+- **Claude Code** resumes on its own with `claude --resume <id>`, keeping the same flags (`--dangerously-skip-permissions`, `--model`…). The id comes from `~/.claude/sessions/<pid>.json`.
+- `nvim`, `vim`, `htop`, `btop`, `top`, `less`, `man` and `tail` reopen automatically.
+- Any other command (`bin/dev`, `npm run dev`, `rails s`…) is typed at the prompt and waits for Enter, so nothing risky runs without you seeing it.
 
-Los procesos en sí no pueden sobrevivir a un corte de luz, porque viven en la RAM. Lo que hace Hilo es reconstruir el entorno.
+Processes themselves can't survive a power cut, because they live in RAM. What Hilo does is rebuild the environment around them.
 
-## Paneles
+## Panes
 
-Cada pestaña se puede dividir en varios paneles. Cada panel es una terminal independiente, con su propia shell, carpeta, comando, texto guardado, consumo y sesión de Claude. Todo se restaura tras un apagón con la misma distribución y proporciones.
+Every tab can be split into panes. Each pane is an independent terminal with its own shell, directory, command, saved text, resource usage and Claude session. After a crash, everything comes back with the same layout and proportions.
 
-- **Ctrl+Shift+E** divide a la derecha y **Ctrl+Shift+O** hacia abajo. El panel nuevo abre en la misma carpeta.
-- **Alt+←↑→↓** pasa de un panel a otro, o se puede hacer clic. El panel activo lleva un borde naranja.
-- **Ctrl+Shift+X** maximiza el panel dentro de la pestaña y lo devuelve a su lugar.
-- **Ctrl+Shift+W** o `exit` cierra el panel y los demás ocupan su espacio. Si era el único, se cierra la pestaña.
-- La X de la pestaña cierra la pestaña completa.
-- Para cambiar el tamaño, arrastre la línea divisoria.
-- **Arrastrar una pestaña para volverla panel:** tome la pestaña y arrástrela sobre el área de terminal. Se marca en naranja la mitad del panel donde va a caer (izquierda, derecha, arriba o abajo, según el borde más cercano), y al soltar queda ahí con sus shells vivas. Si la pestaña tenía varios paneles, se mueven todos juntos. Arrastrar dentro de la barra de pestañas sigue sirviendo para reordenarlas.
-- **Entre ventanas:** si la suelta en la barra de pestañas de otra ventana, pasa a esa ventana. Si la suelta sobre el contenido de otra ventana, queda como panel allí. Si la suelta fuera de toda ventana, se abre en una ventana nueva. Una ventana que se queda sin pestañas se cierra sola. Con varias ventanas abiertas la barra de pestañas se ve siempre, para poder arrastrar también la única pestaña de una ventana.
-- **Lo inverso:** clic derecho → *Mover panel a una pestaña nueva* lo saca a su propia pestaña, sin cerrar lo que está corriendo.
-- En la pestaña aparece `▦ 3` cuando tiene 3 paneles. El consumo que muestra es la suma de todos, y el detalle por panel sale al pasar el mouse.
-- La búsqueda, la copia y el pegado actúan sobre el panel activo.
+- **Ctrl+Shift+E** splits to the right and **Ctrl+Shift+O** splits down. The new pane opens in the same directory.
+- **Alt+←↑→↓** moves between panes, or just click one. The active pane has an orange border.
+- **Ctrl+Shift+X** maximizes the pane inside its tab and puts it back.
+- **Ctrl+Shift+W** or `exit` closes the pane and the others take its space. If it was the only one, the tab closes.
+- The X on a tab closes the whole tab.
+- Drag the divider to resize.
+- **Drag a tab to turn it into a pane:** grab the tab and drag it over the terminal area. The half of the pane where it will land (left, right, top or bottom, whichever edge is closest) lights up in orange, and when you drop it, it stays there with its shells still running. If the tab had several panes, they all move together. Dragging within the tab bar still reorders tabs.
+- **Between windows:** drop a tab on another window's tab bar to move it there. Drop it on another window's content to make it a pane there. Drop it outside any window to open it in a new window. A window left with no tabs closes itself.
+- **The other way around:** right click → *Mover panel a una pestaña nueva* (move pane to a new tab) pulls it out into its own tab without stopping what's running.
+- A tab with 3 panes shows `▦ 3`. The usage it shows is the sum of all of them; hover to see each pane.
+- Search, copy and paste act on the active pane.
 
-## Historial de Claude y paneles cerrados
+## Claude history and closed panes
 
-Todo esto se conserva aunque cierre la pestaña o la terminal:
+All of this survives closing the tab or the terminal:
 
-- **Sesiones de Claude:** cada sesión que corre en Hilo queda registrada (las últimas 300) con su carpeta, sus banderas, la hora y el primer mensaje que usted escribió, para reconocerla. Para reanudar una, use clic derecho → *Sesiones de Claude*, que la abre en una pestaña nueva en su carpeta, o en la consola `hilo --historial`, que imprime `cd … && claude … --resume <id>` listo para copiar.
-- **Paneles cerrados:** al cerrar un panel o una pestaña se guardan el texto, la carpeta y las sesiones de Claude de cada panel (los últimos 40). Para reabrirlo con el texto de antes, use clic derecho → *Paneles cerrados*, o en la consola `hilo --cerradas`.
+- **Claude sessions:** every session run inside Hilo is recorded (the last 300) with its directory, flags, time and the first message you wrote, so you can recognize it. To resume one, right click → *Sesiones de Claude* (Claude sessions), which opens it in a new tab in its directory, or run `hilo --historial`, which prints `cd … && claude … --resume <id>` ready to copy.
+- **Closed panes:** when you close a pane or a tab, Hilo keeps the text, directory and Claude sessions of each pane (the last 40). To reopen one with its old text, right click → *Paneles cerrados* (closed panes), or run `hilo --cerradas`.
 
-Solo se registran las sesiones abiertas desde Hilo, no las de GNOME Terminal. Para esas siempre queda `claude --resume`, que las lista todas.
+Only sessions started from Hilo are recorded, not the ones from GNOME Terminal. For those you still have `claude --resume`, which lists them all.
 
-## Cuándo se olvida una pestaña
+## When a tab is forgotten
 
-- Escribir `exit`, Ctrl+Shift+W o la X de la pestaña: sale de la sesión, pero queda en *Paneles cerrados*.
-- Cerrar la **última ventana** con la X: se recuerda y vuelve la próxima vez.
-- Cerrar una ventana cuando hay otras abiertas: se olvida esa ventana.
-- Apagado, cierre de sesión o corte de luz: se recuerda.
+- Typing `exit`, Ctrl+Shift+W or the X on the tab: the session ends, but it stays under *Paneles cerrados*.
+- Closing the **last window** with its X: it's remembered and comes back next time.
+- Closing a window while others are open: that window is forgotten.
+- Shutdown, logout or power cut: it's remembered.
 
-Para abrir sin restaurar: `hilo --fresh`, o la acción «Abrir sin restaurar» en el menú del icono.
+To open without restoring: `hilo --fresh`, or the "Abrir sin restaurar" (open without restoring) action in the app icon's menu.
 
-## Atajos
+## Shortcuts
 
-Se cambian en **Preferencias** (Ctrl+, o clic derecho → Preferencias…), pestaña *Atajos*: haga clic en el atajo y presione la combinación nueva. Esc cancela y Retroceso lo deja sin atajo. Si la combinación ya la usaba otra acción, se le quita y aparece un aviso. La flecha ↺ vuelve al atajo original.
+Change them in **Preferences** (Ctrl+, or right click → *Preferencias…*), *Atajos* tab: click a shortcut and press the new combination. Esc cancels and Backspace leaves it without a shortcut. If another action was using that combination, it's removed from it and you get a notice. The ↺ arrow restores the default.
 
-Por defecto: Ctrl+T o Ctrl+Shift+T nueva pestaña (en la misma carpeta) · Ctrl+Shift+E / O dividir a la derecha / abajo · Alt+flechas cambiar de panel · Ctrl+Shift+X maximizar panel · Ctrl+Shift+W cerrar panel · Ctrl+Shift+N nueva ventana · Ctrl+Shift+Q cerrar ventana · Ctrl+Shift+C/V copiar/pegar · Ctrl+Shift+F buscar · Ctrl+RePág/AvPág cambiar de pestaña · Ctrl+Shift+RePág/AvPág mover pestaña · Alt+1…9 ir a pestaña (fijo) · Ctrl + / − / 0 zoom · Ctrl+Shift+H ocultar o mostrar las pestañas · F11 pantalla completa · Ctrl+, preferencias · Ctrl+Shift+? atajos y controles.
+Defaults: Ctrl+T or Ctrl+Shift+T new tab (same directory) · Ctrl+Shift+E / O split right / down · Alt+arrows switch pane · Ctrl+Shift+X maximize pane · Ctrl+Shift+W close pane · Ctrl+Shift+N new window · Ctrl+Shift+Q close window · Ctrl+Shift+C/V copy/paste · Ctrl+Shift+F search · Ctrl+PgUp/PgDn switch tab · Ctrl+Shift+PgUp/PgDn move tab · Alt+1…9 go to tab (fixed) · Ctrl + / − / 0 zoom · Ctrl+Shift+H hide or show tabs · F11 fullscreen · Ctrl+, preferences · Ctrl+Shift+? shortcuts and controls.
 
-**Botones de la barra:** **+** abre una pestaña nueva, el engranaje abre Preferencias y el teclado muestra todos los atajos vigentes y los gestos con el mouse. **Pestañas ocultas:** el botón del ojo que oculta la barra completa, botones incluidos. Para volver a verla: Ctrl+Shift+H, o clic derecho → *Mostrar las pestañas*. Con la barra oculta todo sigue funcionando con el teclado, y el título de la ventana dice en qué pestaña va, por ejemplo `[2/5]`. Se recuerda al reabrir.
+**Tab bar buttons:** **+** opens a new tab, the gear opens Preferences, and the keyboard shows every current shortcut plus the mouse gestures. **Hidden tabs:** the eye button hides the whole bar, buttons included. To bring it back: Ctrl+Shift+H, or right click → *Mostrar las pestañas* (show tabs). With the bar hidden everything still works from the keyboard, and the window title shows which tab you're on, for example `[2/5]`. This is remembered across restarts.
 
-Además: Ctrl+clic abre enlaces, doble clic en la pestaña la renombra y el clic derecho abre el menú.
+Also: Ctrl+click opens links, double-clicking a tab renames it, and right click opens the menu.
 
-En *General* se activan o desactivan el consumo en las pestañas, la reanudación automática de Claude y la lista de programas que se vuelven a abrir solos.
+Under *General* you can turn the usage display on tabs on or off, toggle automatic Claude resume, and edit the list of programs that reopen on their own.
 
-## Instalar
+## Install
+
+Requirements: Linux with GNOME (or any GTK 3 desktop), Python 3.10+, and PyGObject with GTK 3 and VTE 2.91. On Ubuntu and Debian:
 
 ```sh
-./install.sh              # comando `hilo` + acceso en el menú
-./install.sh --autostart  # además la abre al iniciar sesión
+sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-vte-2.91
+```
+
+Then:
+
+```sh
+./install.sh              # `hilo` command + app menu entry
+./install.sh --autostart  # also open it at login
 ./install.sh --uninstall
 ```
 
-Usa la fuente, la paleta y el scrollback del perfil por defecto de GNOME Terminal, y los colores del tema del sistema.
+It uses the font, palette and scrollback of your default GNOME Terminal profile, and the colors of your system theme.
 
-## Archivos
+## Files
 
-- Sesión: `~/.local/state/hilo/session.json` y `~/.local/state/hilo/scroll/<pestaña>.txt`. Historial: `claude-historial.json` y `cerradas/`, en la misma carpeta. Se escriben de forma atómica (archivo temporal, fsync y rename), así un apagón nunca deja un archivo a medias.
-- Configuración: `~/.config/hilo/config.json`. Se maneja desde Preferencias, y solo guarda lo que cambió respecto a los valores por defecto.
+- Session: `~/.local/state/hilo/session.json` and `~/.local/state/hilo/scroll/<tab>.txt`. History: `claude-historial.json` and `cerradas/`, in the same folder. They're written atomically (temp file, fsync and rename), so a power cut never leaves a half-written file.
+- Settings: `~/.config/hilo/config.json`. Managed from Preferences; it only stores what differs from the defaults.
 
 ```json
 { "show_usage": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
   "shortcuts": { "new_tab": ["<Control>t"], "close_tab": ["<Control><Shift>w"] } }
 ```
 
-## Límites conocidos
+## Known limits
 
-- El texto restaurado vuelve sin colores, porque VTE 0.68 solo exporta texto plano.
-- Lo que había en pantalla completa (vim, top) no se guarda como texto. El programa simplemente se vuelve a abrir.
-- Se pierden como mucho los últimos ~2 s de cambios de pestañas y ~10 s de texto.
+- Restored text comes back without colors, because VTE 0.68 only exports plain text.
+- Full-screen programs (vim, top) aren't saved as text. The program simply reopens.
+- At most the last ~2 s of tab changes and ~10 s of text can be lost.
 
-## Contribuir
+## Contributing
 
-Vea [CONTRIBUTING.md](CONTRIBUTING.md): cómo correr una copia de desarrollo sin tocar su sesión, cómo está organizado el código y qué probar antes de proponer un cambio.
+See [CONTRIBUTING.md](CONTRIBUTING.md) (in Spanish): how to run a development copy without touching your real session, how the code is organized, and what to test before sending a change.
 
-## Licencia
+## License
 
-MIT. Vea [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

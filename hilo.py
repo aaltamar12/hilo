@@ -44,6 +44,8 @@ DEFAULT_CONFIG = {
     "scroll_interval_s": 10,
     # Mostrar RAM y CPU de cada pestaña (shell + todo lo que corre dentro).
     "show_usage": True,
+    # Modo discreto: la barra de pestañas oculta (se siguen manejando con el teclado).
+    "tabs_hidden": False,
     # Los atajos se cambian en Preferencias (Ctrl+,); quedan en "shortcuts".
 }
 
@@ -87,6 +89,7 @@ ACTIONS = [
     ("zoom_in", "Agrandar texto", ["<Control>plus", "<Control>equal", "<Control>KP_Add", "<Control><Shift>plus"]),
     ("zoom_out", "Achicar texto", ["<Control>minus", "<Control>KP_Subtract"]),
     ("zoom_reset", "Tamaño normal", ["<Control>0", "<Control>KP_0"]),
+    ("toggle_tabs", "Ocultar / mostrar las pestañas", ["<Control><Shift>h"]),
     ("fullscreen", "Pantalla completa", ["F11"]),
     ("preferences", "Preferencias", ["<Control>comma"]),
 ]
@@ -461,6 +464,8 @@ class Pane:
         t.connect("window-title-changed", lambda *_: self.win.refresh_titles())
         t.connect("contents-changed", self.on_contents_changed)
         t.connect("button-press-event", self.on_button_press)
+        t.connect("scroll-event", self.on_scroll)
+        self.smooth_dy = 0.0
         t.connect("focus-in-event", lambda *_: self.tab.set_focused(self) or False)
 
         sb = Gtk.Scrollbar(orientation=Gtk.Orientation.VERTICAL, adjustment=t.get_vadjustment())
@@ -688,6 +693,33 @@ class Pane:
             return True
         return False
 
+    def on_scroll(self, term, event):
+        """Trackpad dentro de programas a pantalla completa (Claude, vim, less).
+
+        VTE 0.68 descarta los desplazamientos suaves pequeños del trackpad
+        cuando no hay historial que mover, así que el programa nunca los recibe.
+        Se acumulan y se convierten en pasos de rueda normales, que VTE sí le
+        pasa al programa. Con historial propio, VTE los maneja como siempre.
+        """
+        adj = term.get_vadjustment()
+        if event.direction != Gdk.ScrollDirection.SMOOTH:
+            return False
+        if adj.get_upper() - adj.get_lower() > adj.get_page_size():
+            self.smooth_dy = 0.0
+            return False
+        _ok, _dx, dy = event.get_scroll_deltas()
+        self.smooth_dy += dy
+        steps = int(self.smooth_dy)
+        if steps:
+            self.smooth_dy -= steps
+            direction = Gdk.ScrollDirection.DOWN if steps > 0 else Gdk.ScrollDirection.UP
+            for _ in range(abs(steps)):
+                e = event.copy()
+                e.scroll.direction = direction
+                e.scroll.delta_x = e.scroll.delta_y = 0.0
+                term.event(e)
+        return True
+
     def request_close(self):
         """Cierra solo este panel (si es el único, se cierra la pestaña)."""
         if self.foreground_running() and not self.win.confirm(
@@ -738,6 +770,9 @@ class Tab:
             self.box.pack_start(self.build(layout, saved.get("_saved_at")), True, True, 0)
         # Capa transparente encima para dibujar dónde caerá una pestaña arrastrada.
         self.dropzone = Gtk.DrawingArea()
+        # Sin ventana propia: si la tuviera, se quedaría con los clics y el scroll
+        # de la terminal de abajo (el pass-through del Overlay no la cubre).
+        self.dropzone.set_has_window(False)
         self.dropzone.connect("draw", self.draw_drop)
         self.widget = Gtk.Overlay()
         self.widget.add(self.box)
@@ -1146,12 +1181,19 @@ class TermWindow(Gtk.ApplicationWindow):
         self.nb.connect("create-window", self.on_create_window)
         self.nb.connect("switch-page", self.on_switch_page)
         self.nb.connect("page-reordered", lambda *_: self.app.request_save())
-        plus = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.MENU)
-        plus.set_relief(Gtk.ReliefStyle.NONE)
-        plus.set_tooltip_text("Nueva pestaña (Ctrl+T)")
-        plus.connect("clicked", lambda *_: self.new_tab())
-        plus.show()
-        self.nb.set_action_widget(plus, Gtk.PackType.END)
+        # Botones al final de la barra: nueva pestaña y ocultar la barra.
+        self.plus_btn = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.MENU)
+        self.plus_btn.connect("clicked", lambda *_: self.new_tab())
+        self.hide_btn = Gtk.Button.new_from_icon_name("view-conceal-symbolic", Gtk.IconSize.MENU)
+        self.hide_btn.connect("clicked", lambda *_: self.app.toggle_tabs())
+        bar_btns = Gtk.Box(spacing=0)
+        for b in (self.plus_btn, self.hide_btn):
+            b.set_relief(Gtk.ReliefStyle.NONE)
+            b.set_focus_on_click(False)
+            bar_btns.pack_start(b, False, False, 0)
+        bar_btns.show_all()
+        self.nb.set_action_widget(bar_btns, Gtk.PackType.END)
+        self.update_bar_tooltips()
 
         self.search = Gtk.SearchEntry(placeholder_text="Buscar en el panel (Enter: anterior, Shift+Enter: siguiente)")
         self.search.connect("search-changed", self.on_search_changed)
@@ -1302,9 +1344,17 @@ class TermWindow(Gtk.ApplicationWindow):
             self.app.request_save()
 
     def update_tabs_visibility(self):
-        # Con varias ventanas se ve siempre, para poder arrastrar pestañas entre ellas.
-        self.nb.set_show_tabs(len(self.tabs) > 1 or len(self.app.windows) > 1)
+        # La barra se ve siempre (tiene los botones), salvo en el modo oculto.
+        # Durante un arrastre se muestra igual, para poder soltar la pestaña en ella.
+        self.nb.set_show_tabs(not self.app.config["tabs_hidden"] or bool(self.app.dragging))
         self.refresh_titles()
+
+    def update_bar_tooltips(self):
+        def tip(text, action):
+            hint = self.accel_hint(action)
+            return f"{text} ({hint})" if hint else text
+        self.plus_btn.set_tooltip_text(tip("Nueva pestaña", "new_tab"))
+        self.hide_btn.set_tooltip_text(tip("Ocultar las pestañas", "toggle_tabs"))
 
     def refresh_titles(self):
         for t in self.tabs:
@@ -1337,8 +1387,10 @@ class TermWindow(Gtk.ApplicationWindow):
         cur = self.current()
         if cur:
             title = cur.title()
-            # Con una sola pestaña no hay barra de pestañas: el consumo va en el título.
-            if len(self.tabs) == 1:
+            # Sin barra visible, el título dice en qué pestaña va y cuánto consume.
+            if self.app.config["tabs_hidden"]:
+                if len(self.tabs) > 1:
+                    title = f"[{self.nb.page_num(cur.widget) + 1}/{len(self.tabs)}]  {title}"
                 if len(cur.panes) > 1:
                     title += f"  ·  {len(cur.panes)} paneles"
                 if cur.usage:
@@ -1350,7 +1402,7 @@ class TermWindow(Gtk.ApplicationWindow):
         if tab is not self.active_tab:
             self.prev_tab, self.active_tab = self.active_tab, tab
         if tab:
-            self.set_title(tab.title())
+            GLib.idle_add(lambda: self.refresh_titles() and False)
             GLib.idle_add(lambda: tab.current_pane() and tab.current_pane().term.grab_focus() and False)
         self.app.request_save()
 
@@ -1412,6 +1464,8 @@ class TermWindow(Gtk.ApplicationWindow):
             ("Nueva ventana", "new_window", self.app.new_window, True),
             ("Renombrar pestaña…", "rename_tab", lambda: self.rename_tab(tab), True),
             ("Cerrar pestaña", "close_tab", tab.request_close, True),
+            ("Mostrar las pestañas" if self.app.config["tabs_hidden"] else "Ocultar las pestañas",
+             "toggle_tabs", self.app.toggle_tabs, True),
             None,
             ("Preferencias…", "preferences", self.app.show_preferences, True),
         ]
@@ -1544,6 +1598,7 @@ class TermWindow(Gtk.ApplicationWindow):
             "zoom_out": lambda: self.app.zoom(1 / 1.1),
             "zoom_reset": lambda: self.app.zoom(None),
             "fullscreen": self.toggle_fullscreen,
+            "toggle_tabs": self.app.toggle_tabs,
             "preferences": self.app.show_preferences,
         }.get(action)
         if fn:
@@ -1910,8 +1965,15 @@ class HiloApp(Gtk.Application):
                 if k:
                     self.keymap[k] = action
 
+    def toggle_tabs(self):
+        self.config["tabs_hidden"] = not self.config["tabs_hidden"]
+        self.save_config()
+        self.refresh_tab_bars()
+
     def save_config(self):
         self.rebuild_keymap()
+        for w in self.windows:
+            w.update_bar_tooltips()
         try:
             save_config(self.config)
         except OSError as e:

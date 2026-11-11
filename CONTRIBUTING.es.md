@@ -51,6 +51,7 @@ Todo vive en `hilo.py`, a propósito: se instala con un enlace y no hay paquetes
 | `TermWindow` | Una ventana con su barra de pestañas, la búsqueda, el menú contextual y los atajos. |
 | `PreferencesWindow` | Preferencias: opciones generales y la captura de atajos. |
 | `HelpWindow` | La ventana de atajos y controles: los atajos vigentes, las teclas fijas y los gestos con el mouse. |
+| `Tts`, `TtsPlayer`, `TtsPanel` | Lectura en voz alta de las respuestas de Claude: sigue el historial que escribe `--tts-hook`, lo reproduce con piper y paplay y muestra el panel del parlante. Solo una Hilo tiene `player.lock`, y viaja abierto en una actualización en caliente. |
 | `HiloApp` | La aplicación. Guarda la sesión cada pocos segundos, la restaura al abrir, mide el consumo, lleva el historial de Claude y hace el guardado final al apagar. |
 
 ### Formato de la sesión

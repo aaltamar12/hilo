@@ -51,6 +51,7 @@ Everything lives in `hilo.py`, on purpose: it installs with a symlink and there 
 | `TermWindow` | A window with its tab bar, search, context menu and shortcuts. |
 | `PreferencesWindow` | Preferences: general options and shortcut capture. |
 | `HelpWindow` | The shortcuts and controls window: current shortcuts, fixed keys and mouse gestures. |
+| `Tts`, `TtsPlayer`, `TtsPanel` | Reading Claude replies aloud: follows the history the `--tts-hook` writes, plays it with piper and paplay, and shows the speaker panel. Only one Hilo holds `player.lock`; it travels open through a hot update. |
 | `HiloApp` | The application. Saves the session every few seconds, restores it on launch, measures usage, keeps the Claude history and does the final save on shutdown. |
 
 ### Session format

@@ -50,6 +50,10 @@ DEFAULT_CONFIG = {
     "tabs_hidden": False,
     # Idioma de la interfaz: "auto" (el del sistema), "es" o "en".
     "language": "auto",
+    # Lectura en voz alta: voz de piper (vacío = la primera en ~/.local/share/piper-tts)
+    # y velocidad (menos = más rápido).
+    "tts_model": "",
+    "tts_speed": 1.0,
     # Los atajos se cambian en Preferencias (Ctrl+,); quedan en "shortcuts".
 }
 
@@ -235,6 +239,7 @@ EN = {
         "  --update       apply the new version to the running Hilo, without closing anything\n"
         "  --history N    last N Claude sessions with the command to resume them (20)\n"
         "  --closed       saved closed panes\n"
+        "  --tts-hook     Claude Code Stop hook: logs each reply to read it aloud\n"
         "\nSession: {state}\nHistory: {history}\nSettings: {config}"),
     "Todavía no hay sesiones de Claude registradas.": "No Claude sessions recorded yet.",
     "abierta": "open",
@@ -243,6 +248,33 @@ EN = {
     "texto": "text",
     "Hilo no está abierta.": "Hilo is not running.",
     "Listo: Hilo se actualizó sin cerrar nada.": "Done: Hilo updated without closing anything.",
+    # lectura en voz alta
+    "Lectura en voz alta": "Read aloud",
+    "Abrir la lectura en voz alta": "Open read aloud",
+    "Lectura: pausar / reanudar": "Read aloud: pause / resume",
+    "Lectura: detener y vaciar la cola": "Read aloud: stop and clear the queue",
+    "Anterior": "Previous",
+    "Siguiente": "Next",
+    "Reproducir": "Play",
+    "Reproducir la última": "Play the latest",
+    "Pausar": "Pause",
+    "Reanudar": "Resume",
+    "Detener y vaciar la cola": "Stop and clear the queue",
+    "Ir a la sesión": "Go to the session",
+    "Historial": "History",
+    "Borrar": "Clear",
+    "Nada sonando": "Nothing playing",
+    "Las respuestas nuevas de Claude se leen solas.": "New Claude replies are read on their own.",
+    "La lectura está apagada. Elija una respuesta para oírla.": "Reading is off. Pick a reply to hear it.",
+    "Leer en voz alta las respuestas nuevas": "Read new replies aloud",
+    "Leer en voz alta las respuestas de Claude": "Read Claude's replies aloud",
+    "Con piper. El historial y los controles están en el botón del parlante.":
+        "With piper. History and controls are under the speaker button.",
+    "Todavía no hay respuestas.": "No replies yet.",
+    "Claude no está anotando sus respuestas: falta el hook.": "Claude isn't logging its replies: the hook is missing.",
+    "Reparar": "Fix",
+    "No se pudo registrar el hook.": "Could not register the hook.",
+    "hilo: piper no pudo leer la respuesta {i}": "hilo: piper could not read reply {i}",
 }
 
 ES = {
@@ -252,6 +284,7 @@ ES = {
         "  --actualizar   aplicar la versión nueva a la Hilo abierta, sin cerrar nada\n"
         "  --historial N  últimas N sesiones de Claude con su comando para reanudar (20)\n"
         "  --cerradas     paneles cerrados guardados\n"
+        "  --tts-hook     hook Stop de Claude Code: anota cada respuesta para leerla en voz alta\n"
         "\nSesión: {state}\nHistorial: {history}\nConfiguración: {config}"),
 }
 
@@ -305,6 +338,9 @@ ACTIONS = [
     ("preferences", T("Preferencias"), ["<Control>comma"]),
     ("show_help", T("Ver atajos y controles"), ["<Control><Shift>question"]),
     ("apply_update", T("Aplicar actualización de Hilo sin cerrar nada"), []),
+    ("tts_panel", T("Abrir la lectura en voz alta"), []),
+    ("tts_play_pause", T("Lectura: pausar / reanudar"), []),
+    ("tts_stop", T("Lectura: detener y vaciar la cola"), []),
 ]
 
 # Cómo se agrupan las acciones en la ventana de atajos y controles.
@@ -315,6 +351,7 @@ HELP_GROUPS = [
                  "zoom_pane", "detach_pane", "close_pane"]),
     (T("Texto"), ["copy", "paste", "search", "zoom_in", "zoom_out", "zoom_reset"]),
     (T("Ventana"), ["new_window", "close_window", "fullscreen", "preferences", "show_help", "apply_update"]),
+    (T("Lectura en voz alta"), ["tts_panel", "tts_play_pause", "tts_stop"]),
 ]
 # Lo que no se configura: teclas fijas y gestos con el mouse.
 HELP_FIXED = [
@@ -717,6 +754,758 @@ def gnome_profile():
 def rgba(spec):
     c = Gdk.RGBA()
     return c if spec and c.parse(spec) else None
+
+
+# ---------------------------------------------------------------- lectura en voz alta
+
+# Un hook Stop de Claude Code anota cada respuesta en TTS_HISTORY (una línea JSON:
+# ts, project, text, session_id). Hilo la lee en voz alta con piper y paplay, guarda
+# el historial para volver a escucharlo y sabe en qué panel corre cada sesión.
+TTS_DIR = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.join(HOME, ".local/share")), "claude-tts")
+TTS_HISTORY = os.path.join(TTS_DIR, "history.jsonl")
+TTS_LOCK = os.path.join(TTS_DIR, "player.lock")
+TTS_OFF = os.path.join(HOME, ".claude", "tts-off")       # existe = lectura apagada
+PIPER_DIR = os.path.join(HOME, ".local/share/piper-tts")
+TTS_KEEP = 200            # líneas del historial que se conservan
+TTS_SHOWN = 40            # respuestas que se ven en el panel
+TTS_MAX = 700             # caracteres que se leen de cada respuesta
+TTS_RATE = 22050
+TTS_BPS = TTS_RATE * 2    # s16le mono
+TTS_LEAD = 0.25           # audio que paplay tiene por delante (lo que tarda en pausar)
+
+
+def tts_model(cfg):
+    path = os.path.expanduser(cfg.get("tts_model") or "")
+    if path and os.path.exists(path):
+        return path
+    try:
+        voices = sorted(f for f in os.listdir(PIPER_DIR) if f.endswith(".onnx"))
+    except OSError:
+        return None
+    return os.path.join(PIPER_DIR, voices[0]) if voices else None
+
+
+def tts_available(cfg):
+    import shutil
+    return bool(os.access(os.path.join(PIPER_DIR, "venv/bin/piper"), os.X_OK)
+                and tts_model(cfg) and shutil.which("paplay"))
+
+
+def clean_reply(text):
+    """Lo que vale la pena oír: sin bloques de código, enlaces ni marcas de Markdown."""
+    import re
+    out, fence = [], False
+    for line in text.split("\n"):
+        if line.startswith("```"):
+            fence = not fence
+            continue
+        if not fence:
+            out.append(line)
+    t = "\n".join(out)
+    t = re.sub(r"`[^`]*`", "", t)
+    t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", t)
+    t = re.sub(r"https?://\S+", "", t)
+    t = re.sub(r"[*_#>|-]+", " ", t)
+    return " ".join(t.split())
+
+
+def tts_hook():
+    """`hilo --tts-hook`: hook Stop de Claude Code. Anota la última respuesta."""
+    try:
+        data = json.load(sys.stdin)
+    except ValueError:
+        return 0
+    if data.get("stop_hook_active") or not data.get("transcript_path"):
+        return 0
+    last = None
+    try:
+        with open(data["transcript_path"], encoding="utf-8", errors="replace") as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if d.get("type") != "assistant":
+                    continue
+                parts = [c.get("text", "") for c in (d.get("message") or {}).get("content") or []
+                         if isinstance(c, dict) and c.get("type") == "text"]
+                if "".join(parts):
+                    last = "\n".join(parts)
+    except OSError:
+        return 0
+    text = clean_reply(last or "")[:TTS_MAX]
+    if not text:
+        return 0
+    entry = {"ts": int(time.time()), "project": os.path.basename((data.get("cwd") or "").rstrip("/")),
+             "text": text, "session_id": data.get("session_id")}
+    os.makedirs(TTS_DIR, exist_ok=True)
+    with open(TTS_HISTORY, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return 0
+
+
+def tts_hook_registered():
+    """True si algún hook Stop anota las respuestas; None si settings.json no se puede leer ahora."""
+    try:
+        with open(os.path.join(HOME, ".claude", "settings.json"), encoding="utf-8") as f:
+            stops = (json.load(f).get("hooks") or {}).get("Stop") or []
+    except FileNotFoundError:
+        return False
+    except (OSError, ValueError):
+        return None
+    cmds = [h.get("command") or "" for g in stops for h in g.get("hooks") or []]
+    return any("--tts-hook" in c or "speak-last-reply" in c for c in cmds)
+
+
+def tts_register_hook():
+    """Agrega `hilo --tts-hook` como grupo propio (otras herramientas reescriben grupos ajenos)."""
+    path = os.path.join(HOME, ".claude", "settings.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = f.read()
+        settings = json.loads(raw)
+    except FileNotFoundError:
+        raw, settings = None, {}
+    if raw is not None:
+        atomic_write(path + ".bak-hilo", raw.encode())
+    exe = os.path.join(HOME, ".local/bin/hilo")
+    cmd = (exe if os.path.exists(exe) else shlex.quote(os.path.realpath(__file__))) + " --tts-hook"
+    settings.setdefault("hooks", {}).setdefault("Stop", []).append(
+        {"hooks": [{"type": "command", "command": cmd, "timeout": 5}]})
+    atomic_write(path, (json.dumps(settings, indent=2, ensure_ascii=False) + "\n").encode())
+
+
+class TtsPlayer:
+    """Lista de reproducción: el historial. Las respuestas que llegan con la lectura encendida
+    quedan "sin oír" y suenan en orden; anterior, siguiente o un clic saltan, y las pendientes
+    siguen después. piper sintetiza en un hilo aparte y el audio va a paplay en tiempo real,
+    para que la pausa responda al instante."""
+
+    def __init__(self, on_change, model, speed):
+        import threading
+        self.on_change, self.model, self.speed = on_change, model, speed
+        self.entries, self.unplayed = [], []
+        self.cursor = -1
+        self.state = "idle"          # idle | playing | paused
+        self.elapsed = 0.0
+        self.enabled = True
+        self.duration = {}
+        self._lock = threading.Lock()
+        self._wake = threading.Event()
+        self._gen = self._handled = 0
+        self._target = None
+        self._cache = {}
+        self._procs = []
+        threading.Thread(target=self._run, daemon=True).start()
+
+    # -- controles (hilo de la interfaz)
+    def add(self, new):
+        with self._lock:
+            base = len(self.entries)
+            self.entries.extend(new)
+            if self.enabled:
+                self.unplayed.extend(range(base, len(self.entries)))
+            start = self.unplayed[0] if self.enabled and self.state == "idle" and self.unplayed else None
+        if start is not None:
+            self.play(start)
+        else:
+            self.on_change()
+
+    def play(self, index):
+        with self._lock:
+            self._gen += 1
+            self._target = self.cursor = index
+            self.state, self.elapsed = "playing", 0.0
+            if index in self.unplayed:
+                self.unplayed.remove(index)
+            self._kill()
+        self._wake.set()
+        self.on_change()
+
+    def toggle_pause(self):
+        if self.state == "playing":
+            self.state = "paused"
+        elif self.state == "paused":
+            self.state = "playing"
+        elif self.entries:
+            self.play(self.cursor if self.cursor >= 0 else len(self.entries) - 1)
+            return
+        self.on_change()
+
+    def next(self):
+        target = self.unplayed[0] if self.unplayed else (
+            self.cursor + 1 if self.cursor + 1 < len(self.entries) else None)
+        if target is not None:
+            self.play(target)
+
+    def previous(self):
+        if self.cursor < 0:
+            return
+        # Pasados unos segundos, "anterior" vuelve al comienzo de la misma respuesta.
+        restart = self.state == "idle" or self.elapsed > 3 or self.cursor == 0
+        self.play(self.cursor if restart else self.cursor - 1)
+
+    def stop(self, clear=False):
+        with self._lock:
+            self._gen += 1
+            self._target = None
+            self._kill()
+            self.unplayed.clear()
+            self.state, self.elapsed = "idle", 0.0
+            if clear:
+                self.entries.clear()
+                self._cache.clear()
+                self.duration.clear()
+                self.cursor = -1
+        self.on_change()
+
+    def current(self):
+        return self.entries[self.cursor] if 0 <= self.cursor < len(self.entries) else None
+
+    def can_go_next(self):
+        return bool(self.unplayed) or self.cursor + 1 < len(self.entries)
+
+    # -- hilo de audio
+    def _kill(self):
+        for p in self._procs:
+            if p.poll() is None:
+                p.kill()
+
+    def _run(self):
+        while True:
+            self._wake.wait()
+            self._wake.clear()
+            with self._lock:
+                gen, index = self._gen, self._target
+            if index is None or gen == self._handled:
+                continue
+            self._handled = gen
+            pcm = self._pcm(gen, index)
+            if pcm is None or gen != self._gen:
+                continue
+            self.duration[index] = len(pcm) / TTS_BPS
+            self.on_change()
+            if self._stream(gen, pcm):
+                self._advance(gen)
+
+    def _pcm(self, gen, index):
+        import subprocess
+        if index in self._cache:
+            return self._cache[index]
+        proc = subprocess.Popen(
+            [os.path.join(PIPER_DIR, "venv/bin/piper"), "-m", self.model, "--length-scale", str(self.speed),
+             "--output-raw"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self._procs = [proc]
+        try:
+            proc.stdin.write(self.entries[index]["text"].encode())
+            proc.stdin.close()
+            pcm = proc.stdout.read()
+        except (OSError, ValueError, IndexError, KeyError):
+            pcm = b""
+        proc.wait()
+        if gen != self._gen:
+            return None
+        if proc.returncode != 0 or not pcm:
+            print(T("hilo: piper no pudo leer la respuesta {i}", i=index), file=sys.stderr)
+            self._advance(gen)
+            return None
+        if len(self._cache) >= 8:
+            self._cache.pop(next(iter(self._cache)))
+        self._cache[index] = pcm
+        return pcm
+
+    def _stream(self, gen, pcm):
+        import subprocess
+        pa = subprocess.Popen(["paplay", "--raw", f"--rate={TTS_RATE}", "--format=s16le", "--channels=1",
+                               "--latency-msec=100"], stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        self._procs = [pa]
+        chunk = TTS_BPS // 10
+        pos, sent, elapsed, last = 0, 0.0, 0.0, time.monotonic()
+        try:
+            while gen == self._gen:
+                now = time.monotonic()
+                dt, last = now - last, now
+                if self.state == "paused":
+                    time.sleep(0.05)
+                    continue
+                elapsed += dt
+                self.elapsed = elapsed
+                if pos < len(pcm):
+                    if sent - elapsed > TTS_LEAD:
+                        time.sleep(0.03)
+                        continue
+                    pa.stdin.write(pcm[pos:pos + chunk])
+                    pa.stdin.flush()
+                    pos += chunk
+                    sent = min(pos, len(pcm)) / TTS_BPS
+                elif elapsed >= sent + 0.3:
+                    return True
+                else:
+                    time.sleep(0.03)
+        except (BrokenPipeError, ValueError, OSError):
+            pass
+        finally:
+            if pa.poll() is None:
+                pa.kill()
+            pa.wait()
+        return False
+
+    def _advance(self, gen):
+        with self._lock:
+            if gen != self._gen:
+                return
+            nxt = self.unplayed[0] if self.unplayed and self.enabled else None
+            if nxt is None:
+                self.state, self.elapsed = "idle", 0.0
+        if nxt is not None:
+            self.play(nxt)
+        else:
+            self.on_change()
+
+
+MPRIS_XML = """<node>
+  <interface name="org.mpris.MediaPlayer2">
+    <method name="Raise"/><method name="Quit"/>
+    <property name="CanQuit" type="b" access="read"/><property name="CanRaise" type="b" access="read"/>
+    <property name="HasTrackList" type="b" access="read"/><property name="Identity" type="s" access="read"/>
+    <property name="SupportedUriSchemes" type="as" access="read"/>
+    <property name="SupportedMimeTypes" type="as" access="read"/>
+  </interface>
+  <interface name="org.mpris.MediaPlayer2.Player">
+    <method name="Next"/><method name="Previous"/><method name="Pause"/><method name="PlayPause"/>
+    <method name="Stop"/><method name="Play"/>
+    <method name="Seek"><arg direction="in" name="Offset" type="x"/></method>
+    <method name="SetPosition"><arg direction="in" name="TrackId" type="o"/><arg direction="in" name="Position" type="x"/></method>
+    <property name="PlaybackStatus" type="s" access="read"/><property name="Rate" type="d" access="read"/>
+    <property name="MinimumRate" type="d" access="read"/><property name="MaximumRate" type="d" access="read"/>
+    <property name="Metadata" type="a{sv}" access="read"/><property name="Position" type="x" access="read"/>
+    <property name="CanGoNext" type="b" access="read"/><property name="CanGoPrevious" type="b" access="read"/>
+    <property name="CanPlay" type="b" access="read"/><property name="CanPause" type="b" access="read"/>
+    <property name="CanSeek" type="b" access="read"/><property name="CanControl" type="b" access="read"/>
+  </interface>
+</node>"""
+
+
+class TtsMpris:
+    """Teclas multimedia y el control de medios de GNOME manejan la lectura."""
+    PLAYER = "org.mpris.MediaPlayer2.Player"
+
+    def __init__(self, tts):
+        self.tts = tts
+        self.conn = None
+        self.node = Gio.DBusNodeInfo.new_for_xml(MPRIS_XML)
+        Gio.bus_own_name(Gio.BusType.SESSION, "org.mpris.MediaPlayer2.hilo", Gio.BusNameOwnerFlags.NONE,
+                         self.on_bus, None, None)
+
+    def on_bus(self, conn, _name):
+        self.conn = conn
+        for info in self.node.interfaces:
+            conn.register_object("/org/mpris/MediaPlayer2", info, self.on_method, self.on_get, None)
+
+    def props(self, iface):
+        p = self.tts.player
+        if iface != self.PLAYER:
+            return {"CanQuit": GLib.Variant("b", False), "CanRaise": GLib.Variant("b", True),
+                    "HasTrackList": GLib.Variant("b", False), "Identity": GLib.Variant("s", "Hilo"),
+                    "SupportedUriSchemes": GLib.Variant("as", []), "SupportedMimeTypes": GLib.Variant("as", [])}
+        e = p.current()
+        meta = {"mpris:trackid": GLib.Variant("o", f"/dev/hilo/tts/{max(p.cursor, 0)}")}
+        if e:
+            meta["xesam:title"] = GLib.Variant("s", e.get("text", "")[:80])
+            meta["xesam:artist"] = GLib.Variant("as", [e.get("project") or "Claude"])
+            if p.duration.get(p.cursor):
+                meta["mpris:length"] = GLib.Variant("x", int(p.duration[p.cursor] * 1e6))
+        return {"PlaybackStatus": GLib.Variant("s", {"playing": "Playing", "paused": "Paused"}.get(p.state, "Stopped")),
+                "Rate": GLib.Variant("d", 1.0), "MinimumRate": GLib.Variant("d", 1.0),
+                "MaximumRate": GLib.Variant("d", 1.0), "Metadata": GLib.Variant("a{sv}", meta),
+                "Position": GLib.Variant("x", int(p.elapsed * 1e6)),
+                "CanGoNext": GLib.Variant("b", p.can_go_next()), "CanGoPrevious": GLib.Variant("b", p.cursor >= 0),
+                "CanPlay": GLib.Variant("b", bool(p.entries)), "CanPause": GLib.Variant("b", True),
+                "CanSeek": GLib.Variant("b", False), "CanControl": GLib.Variant("b", True)}
+
+    def on_get(self, _c, _s, _p, iface, name):
+        return self.props(iface)[name]
+
+    def on_method(self, _c, _s, _p, iface, method, _params, inv):
+        p = self.tts.player
+        fn = {"Next": p.next, "Previous": p.previous, "PlayPause": p.toggle_pause, "Stop": p.stop,
+              "Pause": lambda: p.state == "playing" and p.toggle_pause(),
+              "Play": lambda: p.state != "playing" and p.toggle_pause(),
+              "Raise": lambda: self.tts.app.windows and self.tts.app.windows[0].present()}.get(method)
+        if fn:
+            fn()
+        inv.return_value(None)
+
+    def notify(self):
+        if self.conn:
+            changed = {k: v for k, v in self.props(self.PLAYER).items() if k != "Position"}
+            self.conn.emit_signal(None, "/org/mpris/MediaPlayer2", "org.freedesktop.DBus.Properties",
+                                  "PropertiesChanged", GLib.Variant("(sa{sv}as)", (self.PLAYER, changed, [])))
+
+
+class Tts:
+    """Lee el historial que escribe el hook, maneja el reproductor y sabe de qué panel vino
+    cada respuesta. Solo una Hilo a la vez lee en voz alta (candado en TTS_LOCK)."""
+
+    def __init__(self, app, handover=None):
+        self.app = app
+        self.owner = False
+        self.lock_fd = None
+        self.offset = 0
+        self.mpris = None
+        self.enabled = not os.path.exists(TTS_OFF)
+        self.player = TtsPlayer(lambda: GLib.idle_add(self.changed), tts_model(app.config),
+                                app.config.get("tts_speed", 1.0))
+        self.load(handover)
+        self.take_lock((handover or {}).get("lock_fd"))
+        self.player.enabled = self.enabled and self.owner
+        GLib.timeout_add(500, self.poll)
+
+    def take_lock(self, inherited=None):
+        """El candado viaja abierto en una actualización en caliente (como los pty):
+        si se soltara un instante, otra Hilo podría quedarse con la lectura."""
+        import fcntl
+        if inherited is not None:
+            try:
+                fcntl.flock(inherited, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                os.set_inheritable(inherited, False)
+                self.lock_fd, self.owner = inherited, True
+                self.mpris = TtsMpris(self)
+                return True
+            except OSError:
+                pass
+        try:
+            os.makedirs(TTS_DIR, exist_ok=True)
+            fd = os.open(TTS_LOCK, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o644)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                os.close(fd)
+                return False
+        except OSError:
+            return False
+        self.lock_fd, self.owner = fd, True
+        self.mpris = TtsMpris(self)
+        self.changed()
+        return True
+
+    def load(self, handover):
+        """Lo que ya estaba anotado es historial: no se lee solo, salvo la cola que
+        traía la versión anterior de Hilo en una actualización en caliente."""
+        try:
+            with open(TTS_HISTORY, "rb") as f:
+                data = f.read()
+        except OSError:
+            return
+        if handover and 0 <= handover.get("offset", -1) <= len(data):
+            data = data[:handover["offset"]]
+        complete = data[:data.rfind(b"\n") + 1]
+        lines = complete.decode("utf-8", "replace").splitlines()
+        if not handover and len(lines) > 2 * TTS_KEEP:
+            lines = lines[-TTS_KEEP:]
+            complete = ("\n".join(lines) + "\n").encode()
+            try:
+                atomic_write(TTS_HISTORY, complete)
+            except OSError:
+                pass
+        self.offset = len(complete)
+        p = self.player
+        p.entries = self.parse(complete)
+        p.cursor = len(p.entries) - 1
+        if handover:
+            n = len(p.entries)
+            p.unplayed = [i for i in handover.get("unplayed", []) if 0 <= i < n]
+            cur = handover.get("cursor", -1)
+            if 0 <= cur < n:
+                p.cursor = cur
+                if handover.get("state") == "playing":
+                    GLib.idle_add(lambda: self.owner and p.play(cur) and False)
+
+    @staticmethod
+    def parse(raw):
+        out = []
+        for line in raw.decode("utf-8", "replace").splitlines():
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(e, dict) and e.get("text"):
+                out.append(e)
+        return out
+
+    def handover(self):
+        p = self.player
+        out = {"offset": self.offset, "cursor": p.cursor, "unplayed": list(p.unplayed), "state": p.state}
+        if self.lock_fd is not None:
+            os.set_inheritable(self.lock_fd, True)
+            out["lock_fd"] = self.lock_fd
+        return out
+
+    def poll(self):
+        if self.app.frozen:
+            return True
+        if not self.owner and self.take_lock():
+            self.player.enabled = self.enabled
+        enabled = not os.path.exists(TTS_OFF)
+        if enabled != self.enabled:
+            self.enabled = enabled
+            self.player.enabled = enabled and self.owner
+            if not enabled:
+                self.player.stop()
+            self.changed()
+        try:
+            size = os.path.getsize(TTS_HISTORY)
+        except OSError:
+            size = 0
+        if size < self.offset:
+            self.offset = size
+        elif size > self.offset:
+            with open(TTS_HISTORY, "rb") as f:
+                f.seek(self.offset)
+                data = f.read()
+            complete = data[:data.rfind(b"\n") + 1]
+            self.offset += len(complete)
+            new = self.parse(complete)
+            if new:
+                self.player.add(new)
+        if self.player.state == "playing":
+            for w in self.app.windows:
+                w.update_tts(progress_only=True)
+        return True
+
+    def changed(self):
+        for w in self.app.windows:
+            w.update_tts()
+            w.refresh_titles()
+        if self.mpris:
+            self.mpris.notify()
+        return False
+
+    def set_enabled(self, on):
+        try:
+            if on and os.path.exists(TTS_OFF):
+                os.remove(TTS_OFF)
+            elif not on:
+                os.makedirs(os.path.dirname(TTS_OFF), exist_ok=True)
+                open(TTS_OFF, "a").close()
+        except OSError:
+            pass
+        self.poll()
+
+    def clear(self):
+        self.player.stop(clear=True)
+        try:
+            atomic_write(TTS_HISTORY, b"")
+        except OSError:
+            pass
+        self.offset = 0
+
+    def speaking(self):
+        return self.player.current() if self.player.state != "idle" else None
+
+    def pane_for(self, entry):
+        """El panel donde corre (o corrió) la sesión de Claude de esa respuesta."""
+        if not entry:
+            return None
+        sid = entry.get("session_id")
+        panes = self.app.all_panes()
+        if sid:
+            hit = next((p for p in panes if p.live_claude == sid), None) or \
+                  next((p for p in panes if sid in p.claude_ids), None)
+            if hit:
+                return hit
+        proj = entry.get("project")
+        return next((p for p in panes if p.live_claude and proj
+                     and os.path.basename(p.cwd.rstrip("/")) == proj), None)
+
+    def go(self, entry):
+        pane = self.pane_for(entry)
+        if not pane:
+            return
+        tab, win = pane.tab, pane.win
+        if tab.zoomed and tab.zoomed is not pane:
+            tab.unzoom()
+        win.nb.set_current_page(win.nb.page_num(tab.widget))
+        tab.set_focused(pane)
+        win.present()
+        GLib.idle_add(lambda: pane.term.grab_focus() and False)
+
+    def shutdown(self):
+        self.player.stop()
+
+
+def fmt_secs(s):
+    s = int(s or 0)
+    return f"{s // 60}:{s % 60:02d}"
+
+
+class TtsPanel(Gtk.Popover):
+    """Controles e historial de la lectura en voz alta, bajo el botón del parlante."""
+
+    def __init__(self, win):
+        super().__init__(relative_to=win.tts_btn, position=Gtk.PositionType.BOTTOM)
+        self.win, self.app = win, win.app
+        self.sig = None
+        self.get_style_context().add_class("hilo-tts-panel")
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=14)
+        box.set_size_request(420, -1)
+
+        self.warn = Gtk.Box(spacing=10)
+        wl = Gtk.Label(label=T("Claude no está anotando sus respuestas: falta el hook."),
+                       xalign=0, wrap=True, max_width_chars=34)
+        fix = Gtk.Button(label=T("Reparar"), valign=Gtk.Align.CENTER)
+        fix.connect("clicked", self.on_fix)
+        self.warn.pack_start(wl, True, True, 0)
+        self.warn.pack_end(fix, False, False, 0)
+        self.warn.get_style_context().add_class("hilo-tts-warn")
+        box.pack_start(self.warn, False, False, 0)
+
+        self.title = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        self.text = Gtk.Label(xalign=0, wrap=True, lines=2, ellipsize=Pango.EllipsizeMode.END,
+                              width_chars=46, max_width_chars=46)
+        self.text.get_style_context().add_class("dim-label")
+        box.pack_start(self.title, False, False, 0)
+        box.pack_start(self.text, False, False, 0)
+        prog = Gtk.Box(spacing=10)
+        self.bar = Gtk.ProgressBar(valign=Gtk.Align.CENTER)
+        self.bar.get_style_context().add_class("hilo-tts")
+        self.time = Gtk.Label()
+        self.time.get_style_context().add_class("dim-label")
+        self.time.get_style_context().add_class("hilo-usage")
+        prog.pack_start(self.bar, True, True, 0)
+        prog.pack_end(self.time, False, False, 0)
+        box.pack_start(prog, False, False, 0)
+
+        p = self.app.tts.player
+        ctl = Gtk.Box(spacing=6, halign=Gtk.Align.CENTER)
+
+        def btn(icon, tip, fn):
+            b = Gtk.Button.new_from_icon_name(icon, Gtk.IconSize.BUTTON)
+            b.set_relief(Gtk.ReliefStyle.NONE)
+            b.set_tooltip_text(tip)
+            b.connect("clicked", lambda *_: fn())
+            ctl.pack_start(b, False, False, 0)
+            return b
+        self.prev_b = btn("media-skip-backward-symbolic", T("Anterior"), p.previous)
+        self.play_b = btn("media-playback-start-symbolic", T("Reproducir"), p.toggle_pause)
+        self.next_b = btn("media-skip-forward-symbolic", T("Siguiente"), p.next)
+        self.stop_b = btn("media-playback-stop-symbolic", T("Detener y vaciar la cola"), p.stop)
+        self.go_b = btn("go-jump-symbolic", T("Ir a la sesión"), lambda: self.go(p.current()))
+        box.pack_start(ctl, False, False, 0)
+
+        sw_row = Gtk.Box(spacing=10)
+        sw_row.pack_start(Gtk.Label(label=T("Leer en voz alta las respuestas nuevas"), xalign=0), True, True, 0)
+        self.sw = Gtk.Switch(valign=Gtk.Align.CENTER)
+        self.sw_handler = self.sw.connect("notify::active", lambda s, _p: self.app.tts.set_enabled(s.get_active()))
+        sw_row.pack_end(self.sw, False, False, 0)
+        box.pack_start(sw_row, False, False, 0)
+        box.pack_start(Gtk.Separator(), False, False, 0)
+
+        head = Gtk.Box(spacing=10)
+        hl = Gtk.Label(xalign=0)
+        hl.set_markup(f"<b>{GLib.markup_escape_text(T('Historial'))}</b>")
+        head.pack_start(hl, True, True, 0)
+        self.wipe = Gtk.Button(label=T("Borrar"))
+        self.wipe.set_relief(Gtk.ReliefStyle.NONE)
+        self.wipe.connect("clicked", lambda *_: self.app.tts.clear())
+        head.pack_end(self.wipe, False, False, 0)
+        box.pack_start(head, False, False, 0)
+
+        self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, activate_on_single_click=True)
+        self.list.get_style_context().add_class("frame")
+        self.list.connect("row-activated", lambda _l, row: p.play(row.index))
+        self.empty = Gtk.Label(label=T("Todavía no hay respuestas."), margin=14)
+        self.empty.get_style_context().add_class("dim-label")
+        self.list.set_placeholder(self.empty)
+        self.empty.show()
+        sc = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, propagate_natural_height=True,
+                                max_content_height=340)
+        sc.add(self.list)
+        box.pack_start(sc, True, True, 0)
+        self.add(box)
+        box.show_all()
+        self.connect("show", lambda *_: (self.warn.set_visible(tts_hook_registered() is False),
+                                         self.refresh(force=True)))
+
+    def on_fix(self, *_):
+        try:
+            tts_register_hook()
+        except (OSError, ValueError) as e:
+            self.app.show_error(T("No se pudo registrar el hook."), str(e))
+        self.warn.set_visible(tts_hook_registered() is False)
+
+    def go(self, entry):
+        self.popdown()
+        self.app.tts.go(entry)
+
+    def refresh(self, force=False, progress_only=False):
+        tts = self.app.tts
+        p = tts.player
+        dur = p.duration.get(p.cursor) or 0
+        if p.state != "idle":
+            self.bar.set_fraction(min(p.elapsed / dur, 1.0) if dur else 0.0)
+            self.time.set_text(f"{fmt_secs(p.elapsed)} / {fmt_secs(dur)}" if dur else "…")
+        else:
+            self.bar.set_fraction(0.0)
+            self.time.set_text("")
+        if progress_only and not force:
+            return
+        cur = p.current()
+        if cur and p.state != "idle":
+            self.title.set_markup(f"<b>{GLib.markup_escape_text(cur.get('project') or 'Claude')}</b>")
+            self.text.set_text(cur.get("text", ""))
+        else:
+            self.title.set_markup(f"<b>{GLib.markup_escape_text(T('Nada sonando'))}</b>")
+            self.text.set_text(T("Las respuestas nuevas de Claude se leen solas.") if tts.enabled
+                               else T("La lectura está apagada. Elija una respuesta para oírla."))
+        playing = p.state == "playing"
+        self.play_b.get_image().set_from_icon_name(
+            "media-playback-pause-symbolic" if playing else "media-playback-start-symbolic", Gtk.IconSize.BUTTON)
+        self.play_b.set_tooltip_text(T("Pausar") if playing else T("Reanudar") if p.state == "paused"
+                                     else T("Reproducir la última"))
+        self.play_b.set_sensitive(bool(p.entries))
+        self.prev_b.set_sensitive(p.cursor >= 0)
+        self.next_b.set_sensitive(p.can_go_next())
+        self.stop_b.set_sensitive(p.state != "idle" or bool(p.unplayed))
+        self.go_b.set_sensitive(tts.pane_for(cur) is not None)
+        self.wipe.set_sensitive(bool(p.entries))
+        self.sw.handler_block(self.sw_handler)
+        self.sw.set_active(tts.enabled)
+        self.sw.handler_unblock(self.sw_handler)
+
+        sig = (len(p.entries), p.cursor, p.state, len(self.app.all_panes()))
+        if sig == self.sig and not force:
+            return
+        self.sig = sig
+        for row in self.list.get_children():
+            self.list.remove(row)
+        for i in range(len(p.entries) - 1, max(len(p.entries) - 1 - TTS_SHOWN, -1), -1):
+            e = p.entries[i]
+            row = Gtk.ListBoxRow()
+            row.index = i
+            h = Gtk.Box(spacing=8, margin=6, margin_start=10)
+            v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            on = i == p.cursor and p.state != "idle"
+            meta = Gtk.Label(xalign=0, ellipsize=Pango.EllipsizeMode.END)
+            when = time.strftime("%H:%M", time.localtime(e.get("ts") or 0))
+            meta.set_markup("<small>" + ("♪  " if on else "") +
+                            GLib.markup_escape_text(f"{when} · {e.get('project') or 'Claude'}") + "</small>")
+            meta.get_style_context().add_class("hilo-tts-on" if on else "dim-label")
+            txt = Gtk.Label(label=e.get("text", ""), xalign=0, ellipsize=Pango.EllipsizeMode.END,
+                            width_chars=40, max_width_chars=40)
+            v.pack_start(meta, False, False, 0)
+            v.pack_start(txt, False, False, 0)
+            h.pack_start(v, True, True, 0)
+            if tts.pane_for(e):
+                g = Gtk.Button.new_from_icon_name("go-jump-symbolic", Gtk.IconSize.MENU)
+                g.set_relief(Gtk.ReliefStyle.NONE)
+                g.set_valign(Gtk.Align.CENTER)
+                g.set_tooltip_text(T("Ir a la sesión"))
+                g.connect("clicked", lambda _b, x=e: self.go(x))
+                h.pack_end(g, False, False, 0)
+            row.add(h)
+            row.show_all()
+            self.list.add(row)
 
 
 # ---------------------------------------------------------------- panel (una terminal)
@@ -1606,7 +2395,13 @@ class TermWindow(Gtk.ApplicationWindow):
         self.sys_label.get_style_context().add_class("hilo-sys")
         self.sys_label.set_tooltip_text(T("Todo el equipo: uso de CPU, temperatura del procesador y RAM usada / total"))
         bar_btns.pack_start(self.sys_label, False, False, 0)
-        for b in (self.plus_btn, self.prefs_btn, self.help_btn, self.hide_btn):
+        # Lectura en voz alta de las respuestas de Claude (solo si hay piper y una voz).
+        self.tts_btn = Gtk.Button.new_from_icon_name("audio-volume-medium-symbolic", Gtk.IconSize.MENU)
+        self.tts_btn.get_style_context().add_class("hilo-tts")
+        self.tts_btn.connect("clicked", lambda *_: self.toggle_tts_panel())
+        self.tts_btn.set_no_show_all(True)
+        self.tts_panel = None
+        for b in (self.tts_btn, self.plus_btn, self.prefs_btn, self.help_btn, self.hide_btn):
             b.set_relief(Gtk.ReliefStyle.NONE)
             b.set_focus_on_click(False)
             bar_btns.pack_start(b, False, False, 0)
@@ -1615,6 +2410,7 @@ class TermWindow(Gtk.ApplicationWindow):
         self.nb.set_action_widget(bar_btns, Gtk.PackType.END)
         self.update_update_btn()
         self.update_bar_tooltips()
+        self.update_tts()
 
         self.search = Gtk.SearchEntry(placeholder_text=T("Buscar en el panel (Enter: anterior, Shift+Enter: siguiente)"))
         self.search.connect("search-changed", self.on_search_changed)
@@ -1775,6 +2571,49 @@ class TermWindow(Gtk.ApplicationWindow):
     def update_update_btn(self):
         self.update_btn.set_visible(self.app.update_ready)
 
+    def update_tts(self, progress_only=False):
+        tts = self.app.tts
+        show = bool(tts and tts.owner)
+        self.tts_btn.set_visible(show)
+        if not show:
+            return
+        if not progress_only:
+            p = tts.player
+            st = p.state if tts.enabled or p.state != "idle" else "off"
+            self.tts_btn.get_image().set_from_icon_name({
+                "playing": "audio-volume-high-symbolic", "paused": "media-playback-pause-symbolic",
+                "idle": "audio-volume-medium-symbolic", "off": "audio-volume-muted-symbolic"}[st],
+                Gtk.IconSize.MENU)
+            ctx = self.tts_btn.get_style_context()
+            (ctx.add_class if p.state != "idle" else ctx.remove_class)("active")
+        if self.tts_panel and self.tts_panel.get_visible():
+            self.tts_panel.refresh(progress_only=progress_only)
+
+    def toggle_tts_panel(self):
+        if not (self.app.tts and self.app.tts.owner):
+            return
+        if self.tts_panel is None:
+            self.tts_panel = TtsPanel(self)
+        if self.tts_panel.get_visible():
+            self.tts_panel.popdown()
+            return
+        if self.tts_btn.get_mapped():
+            self.tts_panel.set_relative_to(self.tts_btn)
+            r = Gdk.Rectangle()
+            a = self.tts_btn.get_allocation()
+            r.x, r.y, r.width, r.height = 0, 0, a.width, a.height
+            self.tts_panel.set_pointing_to(r)
+        else:
+            # Con la barra oculta, el panel sale arriba a la derecha del panel activo.
+            pane = self.current_pane()
+            if not pane:
+                return
+            self.tts_panel.set_relative_to(pane.term)
+            r = Gdk.Rectangle()
+            r.x, r.y, r.width, r.height = pane.term.get_allocated_width() - 40, 0, 1, 1
+            self.tts_panel.set_pointing_to(r)
+        self.tts_panel.popup()
+
     def update_system(self):
         text = self.app.system_text if self.app.config["show_system"] else None
         if not text:
@@ -1794,8 +2633,11 @@ class TermWindow(Gtk.ApplicationWindow):
         self.prefs_btn.set_tooltip_text(tip(T("Preferencias"), "preferences"))
         self.help_btn.set_tooltip_text(tip(T("Atajos y controles"), "show_help"))
         self.hide_btn.set_tooltip_text(tip(T("Ocultar las pestañas"), "toggle_tabs"))
+        self.tts_btn.set_tooltip_text(tip(T("Lectura en voz alta"), "tts_panel"))
 
     def refresh_titles(self):
+        tts = self.app.tts
+        speaking = tts.pane_for(tts.speaking()) if tts and tts.owner else None
         for t in self.tabs:
             multi = len(t.panes) > 1 and not t.zoomed
             cur = t.current_pane()
@@ -1805,7 +2647,8 @@ class TermWindow(Gtk.ApplicationWindow):
                 (ctx.add_class if p is cur else ctx.remove_class)("focused")
             title = t.title()
             n = len(t.panes)
-            shown = (f"{'⤢ ' if t.zoomed else ''}▦ {n}   " if n > 1 else "") + title
+            shown = ("♪ " if speaking in t.panes else "") + \
+                (f"{'⤢ ' if t.zoomed else ''}▦ {n}   " if n > 1 else "") + title
             if t.label.get_text() != shown:
                 t.label.set_text(shown)
             tip = title + ("\n" + T("{n} paneles", n=n) if n > 1 else "")
@@ -2043,6 +2886,9 @@ class TermWindow(Gtk.ApplicationWindow):
             "preferences": self.app.show_preferences,
             "show_help": self.app.show_help,
             "apply_update": self.app.hot_reload,
+            "tts_panel": self.toggle_tts_panel,
+            "tts_play_pause": lambda: self.app.tts and self.app.tts.player.toggle_pause(),
+            "tts_stop": lambda: self.app.tts and self.app.tts.player.stop(),
         }.get(action)
         if fn:
             fn()
@@ -2188,6 +3034,11 @@ class PreferencesWindow(Gtk.Window):
             "autorun", [x.strip() for x in e.get_text().split(",") if x.strip()]))
         lb.add(self.row(T("Programas que se vuelven a abrir solos"),
                         T("Separados por coma. El resto queda escrito esperando Enter."), entry))
+        if self.app.tts:
+            sw = Gtk.Switch(active=self.app.tts.enabled, valign=Gtk.Align.CENTER)
+            sw.connect("notify::active", lambda w, _p: self.app.tts.set_enabled(w.get_active()))
+            lb.add(self.row(T("Leer en voz alta las respuestas de Claude"),
+                            T("Con piper. El historial y los controles están en el botón del parlante."), sw))
         lang = Gtk.ComboBoxText(valign=Gtk.Align.CENTER)
         for code, name in (("auto", T("Automático (el del sistema)")), ("es", "Español"), ("en", "English")):
             lang.append(code, name)
@@ -2370,6 +3221,7 @@ class HiloApp(Gtk.Application):
         self.prefs = None
         self.help_win = None
         self.system_text, self.system_hot, self._sys_prev = None, False, None
+        self.tts = None
         self.rebuild_keymap()
 
     def do_startup(self):
@@ -2387,6 +3239,10 @@ class HiloApp(Gtk.Application):
             button.hilo-update:hover { background: #ffb27a; }
             label.hilo-sys { font-size: 0.9em; font-feature-settings: "tnum"; opacity: 0.75; }
             label.hilo-sys.hot { color: #ff7a59; opacity: 1; }
+            button.hilo-tts.active { color: #ff9f5a; }
+            progressbar.hilo-tts trough, progressbar.hilo-tts progress { min-height: 4px; border-radius: 2px; }
+            progressbar.hilo-tts progress { background: #ff9f5a; border-color: #ff9f5a; }
+            label.hilo-tts-on { color: #ff9f5a; }
         """)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -2419,6 +3275,8 @@ class HiloApp(Gtk.Application):
                     os.unlink(self.relevo_in)
                 except OSError:
                     pass
+        if tts_available(self.config):
+            self.tts = Tts(self, state.get("tts") if self.relevo_in and state else None)
         if state and state.get("windows"):
             self.font_scale = state.get("font_scale", 1.0)
             self.saved_at = state.get("saved_at")
@@ -2691,6 +3549,8 @@ class HiloApp(Gtk.Application):
                      "windows": [w.serialize() for w in self.windows]}
             if reopen:
                 state["reopen_prefs"] = reopen
+            if self.tts:
+                state["tts"] = self.tts.handover()
         finally:
             self.relevo_out = False
         path = os.path.join(STATE_DIR, "relevo.json")
@@ -2798,6 +3658,8 @@ class HiloApp(Gtk.Application):
         self.frozen = True
 
     def do_shutdown(self):
+        if self.tts:
+            self.tts.shutdown()
         if not self.frozen and time.monotonic() >= self.hold_until and self.windows:
             self.save_state(force=True)
         Gtk.Application.do_shutdown(self)
@@ -2805,6 +3667,8 @@ class HiloApp(Gtk.Application):
 
 def main():
     args = sys.argv[1:]
+    if "--tts-hook" in args:
+        return tts_hook()
     if "-h" in args or "--help" in args:
         print(T("USO", state=STATE_FILE, history=HISTORY_FILE, config=CONFIG_FILE))
         return 0

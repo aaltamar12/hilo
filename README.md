@@ -56,6 +56,19 @@ All of this survives closing the tab or the terminal:
 
 Only sessions started from Hilo are recorded, not the ones from GNOME Terminal. For those you still have `claude --resume`, which lists them all.
 
+## Reading Claude replies aloud
+
+If [piper](https://github.com/rhasspy/piper) and a voice are installed in `~/.local/share/piper-tts` (`venv/bin/piper` and a `.onnx` file), a speaker button shows up in the tab bar. Every Claude Code reply is read aloud as soon as it finishes, one after another when several sessions answer at once.
+
+- **The speaker button** opens a panel with what's playing, previous / pause / next / stop, the switch to turn reading on or off, and the history: click a reply to hear it again.
+- **Go to the session** jumps to the exact tab and pane where that Claude session runs, in any Hilo window.
+- The tab that is speaking shows `♪` before its title, and the icon turns orange.
+- Media keys and GNOME's media controls work too.
+- A hot update doesn't lose the queue: the reply that was playing starts again and the rest follow.
+- Only one Hilo reads aloud at a time, so development copies stay quiet.
+
+Claude tells Hilo about each reply through a `Stop` hook that runs `hilo --tts-hook`. If it isn't registered, the panel says so and the **Fix** button adds it to `~/.claude/settings.json` (keeping a backup). Replies are logged to `~/.local/share/claude-tts/history.jsonl` even with reading turned off, and `~/.claude/tts-off` existing means reading is off. Settings: `tts_model` (path to another voice) and `tts_speed` (lower is faster).
+
 ## When a tab is forgotten
 
 - Typing `exit`, Ctrl+Shift+W or the X on the tab: the session ends, but it stays under *Closed panes*.

@@ -56,6 +56,19 @@ Todo esto se conserva aunque cierre la pestaña o la terminal:
 
 Solo se registran las sesiones abiertas desde Hilo, no las de GNOME Terminal. Para esas siempre queda `claude --resume`, que las lista todas.
 
+## Respuestas de Claude en voz alta
+
+Si [piper](https://github.com/rhasspy/piper) y una voz están instalados en `~/.local/share/piper-tts` (`venv/bin/piper` y un archivo `.onnx`), aparece un botón de parlante en la barra de pestañas. Cada respuesta de Claude Code se lee en voz alta apenas termina, una tras otra si responden varias sesiones a la vez.
+
+- **El botón del parlante** abre un panel con lo que está sonando, anterior / pausa / siguiente / detener, el interruptor para encender o apagar la lectura y el historial: un clic en una respuesta la vuelve a leer.
+- **Ir a la sesión** salta a la pestaña y al panel exactos donde corre esa sesión de Claude, en cualquier ventana de Hilo.
+- La pestaña que está hablando muestra `♪` antes del título, y el icono se pone naranja.
+- También funcionan las teclas multimedia y los controles de medios de GNOME.
+- Una actualización en caliente no pierde la cola: la respuesta que sonaba empieza otra vez y siguen las demás.
+- Solo una Hilo lee en voz alta a la vez, así las copias de desarrollo no hablan.
+
+Claude le avisa a Hilo de cada respuesta con un hook `Stop` que corre `hilo --tts-hook`. Si no está registrado, el panel lo dice y el botón **Reparar** lo agrega a `~/.claude/settings.json` (con copia de seguridad). Las respuestas quedan en `~/.local/share/claude-tts/history.jsonl` aunque la lectura esté apagada, y si existe `~/.claude/tts-off` la lectura está apagada. Ajustes: `tts_model` (ruta a otra voz) y `tts_speed` (menos es más rápido).
+
 ## Cuándo se olvida una pestaña
 
 - Escribir `exit`, Ctrl+Shift+W o la X de la pestaña: sale de la sesión, pero queda en *Paneles cerrados*.

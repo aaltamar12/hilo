@@ -1361,6 +1361,7 @@ class TermWindow(Gtk.ApplicationWindow):
 
         self.active_tab = self.prev_tab = None
         self.nb = Gtk.Notebook(scrollable=True, show_border=False)
+        self.nb.get_style_context().add_class("hilo-tabs")
         # Mismo grupo en todas las ventanas: las pestañas se pueden pasar de una a otra.
         self.nb.set_group_name("hilo")
         self.nb.connect("drag-begin", self.on_tab_drag_begin)
@@ -2153,6 +2154,8 @@ class HiloApp(Gtk.Application):
             frame.hilo-pane.multi > border { border: 2px solid alpha(@theme_fg_color, 0.07); }
             frame.hilo-pane.multi.focused > border { border-color: #ff9f5a; }
             label.hilo-usage { font-size: 0.82em; font-feature-settings: "tnum"; }
+            notebook.hilo-tabs > header.top > tabs > tab:checked {
+                box-shadow: inset 0 -3px #ff9f5a; }
             button.hilo-update { background: #ff9f5a; color: #1e140e; border: none; box-shadow: none;
                                  padding: 0 10px; min-height: 22px; border-radius: 11px; font-weight: bold; }
             button.hilo-update:hover { background: #ffb27a; }

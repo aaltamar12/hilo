@@ -92,6 +92,31 @@ ACTIONS = [
     ("toggle_tabs", "Ocultar / mostrar las pestañas", ["<Control><Shift>h"]),
     ("fullscreen", "Pantalla completa", ["F11"]),
     ("preferences", "Preferencias", ["<Control>comma"]),
+    ("show_help", "Ver atajos y controles", ["<Control><Shift>question"]),
+]
+
+# Cómo se agrupan las acciones en la ventana de atajos y controles.
+HELP_GROUPS = [
+    ("Pestañas", ["new_tab", "close_tab", "next_tab", "prev_tab", "move_tab_right", "move_tab_left",
+                  "rename_tab", "toggle_tabs"]),
+    ("Paneles", ["split_right", "split_down", "focus_left", "focus_right", "focus_up", "focus_down",
+                 "zoom_pane", "detach_pane", "close_pane"]),
+    ("Texto", ["copy", "paste", "search", "zoom_in", "zoom_out", "zoom_reset"]),
+    ("Ventana", ["new_window", "close_window", "fullscreen", "preferences", "show_help"]),
+]
+# Lo que no se configura: teclas fijas y gestos con el mouse.
+HELP_FIXED = [
+    ("Ir a la pestaña 1 a 9", "Alt+1 … Alt+9"),
+    ("Seleccionar texto", "Arrastrar con el mouse"),
+    ("Seleccionar dentro de un programa que usa el mouse (Claude, vim)", "Shift + arrastrar"),
+    ("Seleccionar palabra / línea", "Doble clic / triple clic"),
+    ("Abrir un enlace", "Ctrl + clic"),
+    ("Menú del panel", "Clic derecho"),
+    ("Renombrar pestaña", "Doble clic en la pestaña"),
+    ("Volver una pestaña panel", "Arrastrar la pestaña sobre la terminal"),
+    ("Pasar una pestaña a otra ventana", "Arrastrarla a la otra ventana"),
+    ("Abrir una pestaña en ventana nueva", "Soltarla fuera de toda ventana"),
+    ("Cambiar el tamaño de los paneles", "Arrastrar la línea divisoria"),
 ]
 MODIFIER_KEYS = {"Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R", "Meta_L", "Meta_R",
                  "Super_L", "Super_R", "Hyper_L", "Hyper_R", "ISO_Level3_Shift", "ISO_Level5_Shift",
@@ -1184,10 +1209,14 @@ class TermWindow(Gtk.ApplicationWindow):
         # Botones al final de la barra: nueva pestaña y ocultar la barra.
         self.plus_btn = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.MENU)
         self.plus_btn.connect("clicked", lambda *_: self.new_tab())
+        self.prefs_btn = Gtk.Button.new_from_icon_name("emblem-system-symbolic", Gtk.IconSize.MENU)
+        self.prefs_btn.connect("clicked", lambda *_: self.app.show_preferences())
+        self.help_btn = Gtk.Button.new_from_icon_name("input-keyboard-symbolic", Gtk.IconSize.MENU)
+        self.help_btn.connect("clicked", lambda *_: self.app.show_help())
         self.hide_btn = Gtk.Button.new_from_icon_name("view-conceal-symbolic", Gtk.IconSize.MENU)
         self.hide_btn.connect("clicked", lambda *_: self.app.toggle_tabs())
         bar_btns = Gtk.Box(spacing=0)
-        for b in (self.plus_btn, self.hide_btn):
+        for b in (self.plus_btn, self.prefs_btn, self.help_btn, self.hide_btn):
             b.set_relief(Gtk.ReliefStyle.NONE)
             b.set_focus_on_click(False)
             bar_btns.pack_start(b, False, False, 0)
@@ -1354,6 +1383,8 @@ class TermWindow(Gtk.ApplicationWindow):
             hint = self.accel_hint(action)
             return f"{text} ({hint})" if hint else text
         self.plus_btn.set_tooltip_text(tip("Nueva pestaña", "new_tab"))
+        self.prefs_btn.set_tooltip_text(tip("Preferencias", "preferences"))
+        self.help_btn.set_tooltip_text(tip("Atajos y controles", "show_help"))
         self.hide_btn.set_tooltip_text(tip("Ocultar las pestañas", "toggle_tabs"))
 
     def refresh_titles(self):
@@ -1600,6 +1631,7 @@ class TermWindow(Gtk.ApplicationWindow):
             "fullscreen": self.toggle_fullscreen,
             "toggle_tabs": self.app.toggle_tabs,
             "preferences": self.app.show_preferences,
+            "show_help": self.app.show_help,
         }.get(action)
         if fn:
             fn()
@@ -1655,6 +1687,55 @@ class TermWindow(Gtk.ApplicationWindow):
 
 # ---------------------------------------------------------------- preferencias
 
+class HelpWindow(Gtk.Window):
+    """Lista de atajos (los vigentes, no los de fábrica) y gestos con el mouse."""
+
+    def __init__(self, app):
+        super().__init__(title="Atajos y controles", modal=False)
+        self.app = app
+        self.set_default_size(560, 680)
+        self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
+        hb = Gtk.HeaderBar(show_close_button=True, title="Atajos y controles")
+        edit = Gtk.Button(label="Cambiar atajos…")
+        edit.connect("clicked", lambda *_: (self.app.show_preferences("atajos"), self.destroy()))
+        hb.pack_start(edit)
+        self.set_titlebar(hb)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=18)
+        shortcuts = self.app.config["shortcuts"]
+        for title, actions in HELP_GROUPS:
+            rows = []
+            for a in actions:
+                accels = shortcuts.get(a) or []
+                keys = " o ".join(accel_label(x) for x in accels[:2]) if accels else "sin atajo"
+                rows.append((ACTION_LABELS[a], keys, not accels))
+            self.section(box, title, rows)
+        self.section(box, "Teclas fijas y mouse", [(a, b, False) for a, b in HELP_FIXED])
+
+        sc = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+        sc.add(box)
+        self.add(sc)
+        self.connect("key-press-event", lambda _w, e: e.keyval == Gdk.KEY_Escape and (self.destroy() or True))
+        self.show_all()
+
+    def section(self, box, title, rows):
+        head = Gtk.Label(xalign=0, margin_top=12)
+        head.set_markup(f"<b>{GLib.markup_escape_text(title)}</b>")
+        box.pack_start(head, False, False, 0)
+        lb = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        lb.get_style_context().add_class("frame")
+        for label, keys, dim in rows:
+            row = Gtk.Box(spacing=18, margin=8, margin_start=12, margin_end=12)
+            row.pack_start(Gtk.Label(label=label, xalign=0, wrap=True), True, True, 0)
+            k = Gtk.Label(label=keys, xalign=1)
+            k.get_style_context().add_class("dim-label")
+            if not dim:
+                k.set_markup(f"<b>{GLib.markup_escape_text(keys)}</b>")
+            row.pack_end(k, False, False, 0)
+            lb.add(row)
+        box.pack_start(lb, False, False, 0)
+
+
 class PreferencesWindow(Gtk.Window):
     def __init__(self, app):
         super().__init__(title="Preferencias de Hilo", modal=False)
@@ -1663,7 +1744,7 @@ class PreferencesWindow(Gtk.Window):
         self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
         self.capturing = None   # (acción, botón) mientras espera la tecla nueva
 
-        stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
+        stack = self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         switcher = Gtk.StackSwitcher(stack=stack, halign=Gtk.Align.CENTER)
         hb = Gtk.HeaderBar(show_close_button=True, custom_title=switcher)
         self.set_titlebar(hb)
@@ -1848,6 +1929,7 @@ class HiloApp(Gtk.Application):
         self.in_transit = {}        # pestañas que GTK está pasando de una ventana a otra
         self.keymap = {}
         self.prefs = None
+        self.help_win = None
         self.rebuild_keymap()
 
     def do_startup(self):
@@ -1979,14 +2061,27 @@ class HiloApp(Gtk.Application):
         except OSError as e:
             print(f"hilo: no se pudo guardar la configuración: {e}", file=sys.stderr)
 
-    def show_preferences(self):
+    def show_preferences(self, page=None):
         if self.prefs is None:
             self.prefs = PreferencesWindow(self)
             self.prefs.connect("destroy", lambda *_: setattr(self, "prefs", None))
         parent = self.get_active_window()
         if parent and parent is not self.prefs:
             self.prefs.set_transient_for(parent)
+        if page:
+            self.prefs.stack.set_visible_child_name(page)
         self.prefs.present()
+
+    def show_help(self):
+        # Se arma cada vez para mostrar los atajos vigentes.
+        if self.help_win is not None:
+            self.help_win.destroy()
+        parent = self.get_active_window()
+        self.help_win = HelpWindow(self)
+        self.help_win.connect("destroy", lambda w: self.help_win is w and setattr(self, "help_win", None))
+        if parent:
+            self.help_win.set_transient_for(parent)
+        self.help_win.present()
 
     def refresh_tab_bars(self):
         for w in self.windows:

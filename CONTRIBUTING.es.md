@@ -92,7 +92,7 @@ python3 -m py_compile hilo.py
 
 ## Convenciones
 
-- Los textos de la interfaz van en español, en lenguaje natural y tratando de usted.
+- La interfaz viene en español y en inglés. En el código cada texto se escribe en español dentro de `T("…")`, y su versión en inglés va en el diccionario `EN` al comienzo de `hilo.py`. Un texto nuevo sin su entrada en inglés le aparece en español a quien usa inglés. Ambos en lenguaje natural; el español, tratando de usted.
 - La documentación tiene dos versiones: inglés (`README.md`, `CONTRIBUTING.md`) y español (`README.es.md`, `CONTRIBUTING.es.md`). Si cambia una, actualice la otra.
 - Código claro antes que ingenioso. Los comentarios explican el porqué, no el qué.
 - No agregue dependencias fuera de Python, GTK y VTE sin conversarlo antes.

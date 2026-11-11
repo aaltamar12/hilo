@@ -48,6 +48,8 @@ DEFAULT_CONFIG = {
     "show_system": True,
     # Modo discreto: la barra de pestañas oculta (se siguen manejando con el teclado).
     "tabs_hidden": False,
+    # Idioma de la interfaz: "auto" (el del sistema), "es" o "en".
+    "language": "auto",
     # Los atajos se cambian en Preferencias (Ctrl+,); quedan en "shortcuts".
 }
 
@@ -63,63 +65,270 @@ CLAUDE_DROP_FLAGS = {"-c", "--continue", "-p", "--print"}
 CLAUDE_DROP_VALUE_FLAGS = {"-r", "--resume", "--session-id"}
 
 
+# ---------------------------------------------------------------- idioma
+# Los textos se escriben en español y T() los traduce. "language" en la
+# configuración: "auto" (el del sistema), "es" o "en". Se decide al arrancar;
+# cambiarlo en Preferencias hace una actualización en caliente, sin cerrar nada.
+
+def ui_language():
+    try:
+        with open(CONFIG_FILE) as f:
+            pref = json.load(f).get("language", "auto")
+    except (OSError, ValueError, AttributeError):
+        pref = "auto"
+    if pref in ("es", "en"):
+        return pref
+    for var in ("LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"):
+        v = os.environ.get(var)
+        if v and v not in ("C", "POSIX"):
+            return "es" if v.split(":")[0].startswith("es") else "en"
+    return "en"
+
+
+LANG = ui_language()
+
+EN = {
+    # acciones
+    "Nueva pestaña": "New tab",
+    "Nueva ventana": "New window",
+    "Dividir panel a la derecha": "Split pane right",
+    "Dividir panel hacia abajo": "Split pane down",
+    "Cerrar panel (o la pestaña si es el único)": "Close pane (or the tab if it's the only one)",
+    "Maximizar / restaurar panel": "Maximize / restore pane",
+    "Mover panel a una pestaña nueva": "Move pane to a new tab",
+    "Ir al panel de la izquierda": "Go to the pane on the left",
+    "Ir al panel de la derecha": "Go to the pane on the right",
+    "Ir al panel de arriba": "Go to the pane above",
+    "Ir al panel de abajo": "Go to the pane below",
+    "Cerrar pestaña completa": "Close the whole tab",
+    "Cerrar ventana": "Close window",
+    "Copiar": "Copy",
+    "Pegar": "Paste",
+    "Buscar": "Search",
+    "Pestaña siguiente": "Next tab",
+    "Pestaña anterior": "Previous tab",
+    "Mover pestaña a la derecha": "Move tab right",
+    "Mover pestaña a la izquierda": "Move tab left",
+    "Renombrar pestaña": "Rename tab",
+    "Agrandar texto": "Larger text",
+    "Achicar texto": "Smaller text",
+    "Tamaño normal": "Normal size",
+    "Ocultar / mostrar las pestañas": "Hide / show tabs",
+    "Pantalla completa": "Full screen",
+    "Preferencias": "Preferences",
+    "Ver atajos y controles": "Show shortcuts and controls",
+    "Aplicar actualización de Hilo sin cerrar nada": "Apply Hilo update without closing anything",
+    # ventana de atajos y controles
+    "Pestañas": "Tabs",
+    "Paneles": "Panes",
+    "Texto": "Text",
+    "Ventana": "Window",
+    "Ir a la pestaña 1 a 9": "Go to tab 1 to 9",
+    "Seleccionar texto": "Select text",
+    "Arrastrar con el mouse": "Drag with the mouse",
+    "Seleccionar dentro de un programa que usa el mouse (Claude, vim)":
+        "Select inside a program that uses the mouse (Claude, vim)",
+    "Shift + arrastrar": "Shift + drag",
+    "Seleccionar palabra / línea": "Select word / line",
+    "Doble clic / triple clic": "Double click / triple click",
+    "Abrir un enlace": "Open a link",
+    "Ctrl + clic": "Ctrl + click",
+    "Menú del panel": "Pane menu",
+    "Clic derecho": "Right click",
+    "Doble clic en la pestaña": "Double click the tab",
+    "Volver una pestaña panel": "Turn a tab into a pane",
+    "Arrastrar la pestaña sobre la terminal": "Drag the tab onto the terminal",
+    "Pasar una pestaña a otra ventana": "Move a tab to another window",
+    "Arrastrarla a la otra ventana": "Drag it to the other window",
+    "Abrir una pestaña en ventana nueva": "Open a tab in a new window",
+    "Soltarla fuera de toda ventana": "Drop it outside any window",
+    "Cambiar el tamaño de los paneles": "Resize panes",
+    "Arrastrar la línea divisoria": "Drag the divider",
+    "Atajos y controles": "Shortcuts and controls",
+    "Cambiar atajos…": "Change shortcuts…",
+    " o ": " or ",
+    "sin atajo": "no shortcut",
+    "Teclas fijas y mouse": "Fixed keys and mouse",
+    # panel, pestaña y ventana
+    "sesión restaurada {when}": "session restored {when}",
+    "No se pudo abrir la shell: {error}": "Could not start the shell: {error}",
+    "Hay un proceso corriendo en este panel.": "A process is running in this pane.",
+    "Cerrar panel": "Close pane",
+    "Cerrar pestaña (todos sus paneles)": "Close tab (all its panes)",
+    "Hay un proceso corriendo en esta pestaña.": "A process is running in this tab.",
+    "Hay {n} procesos corriendo en esta pestaña.": "{n} processes are running in this tab.",
+    "Cerrar pestaña": "Close tab",
+    "Actualizar": "Update",
+    "Hay una versión nueva de Hilo. Se aplica sin cerrar nada: "
+    "las shells, Claude y lo que esté corriendo siguen vivos.":
+        "A new version of Hilo is ready. It applies without closing anything: "
+        "shells, Claude and whatever is running keep going.",
+    "Todo el equipo: uso de CPU, temperatura del procesador y RAM usada / total":
+        "Whole computer: CPU use, processor temperature and used / total RAM",
+    "Buscar en el panel (Enter: anterior, Shift+Enter: siguiente)":
+        "Search in the pane (Enter: previous, Shift+Enter: next)",
+    "Ocultar las pestañas": "Hide tabs",
+    "Mostrar las pestañas": "Show tabs",
+    "{n} paneles": "{n} panes",
+    "Cancelar": "Cancel",
+    "Guardar": "Save",
+    "Vacío = nombre automático": "Empty = automatic name",
+    "Dividir a la derecha": "Split right",
+    "Dividir hacia abajo": "Split down",
+    "Restaurar paneles": "Restore panes",
+    "Maximizar panel": "Maximize pane",
+    "Renombrar pestaña…": "Rename tab…",
+    "Preferencias…": "Preferences…",
+    "Aplicar actualización de Hilo": "Apply Hilo update",
+    "Sesiones de Claude": "Claude sessions",
+    "Sin sesiones registradas": "No sessions recorded",
+    "Paneles cerrados": "Closed panes",
+    "No hay paneles cerrados": "No closed panes",
+    "Hay un proceso corriendo en esta ventana.": "A process is running in this window.",
+    "Hay {n} procesos corriendo en esta ventana.": "{n} processes are running in this window.",
+    "Si la cierra, se detienen; la sesión se recuerda para la próxima vez.":
+        "If you close it, they stop; the session is remembered for next time.",
+    # preferencias
+    "Preferencias de Hilo": "Hilo preferences",
+    "General": "General",
+    "Atajos": "Shortcuts",
+    "Mostrar RAM y CPU en las pestañas": "Show RAM and CPU on tabs",
+    "La suma de la shell y de todo lo que corre dentro.": "The shell plus everything running inside it.",
+    "Mostrar CPU, temperatura y RAM del equipo": "Show the computer's CPU, temperature and RAM",
+    "En la barra de pestañas, para todo el equipo.": "In the tab bar, for the whole computer.",
+    "Reanudar Claude Code solo al restaurar": "Resume Claude Code on its own when restoring",
+    "Si se apaga, el comando queda escrito esperando Enter.":
+        "If off, the command is typed and waits for Enter.",
+    "Programas que se vuelven a abrir solos": "Programs that reopen on their own",
+    "Separados por coma. El resto queda escrito esperando Enter.":
+        "Comma separated. Anything else is typed and waits for Enter.",
+    "Idioma": "Language",
+    "Se aplica al momento, sin cerrar nada.": "Applies right away, without closing anything.",
+    "Automático (el del sistema)": "Automatic (system)",
+    "La configuración se guarda en {path}": "Settings are saved in {path}",
+    "Volver al atajo original": "Restore the default shortcut",
+    "Restablecer todos los atajos": "Reset all shortcuts",
+    "Haga clic en un atajo y presione la combinación nueva. Esc cancela, Retroceso lo deja sin atajo.":
+        "Click a shortcut and press the new combination. Esc cancels, Backspace leaves it with no shortcut.",
+    "Presione la combinación…": "Press the combination…",
+    "Sin atajo": "No shortcut",
+    "También: ": "Also: ",
+    "Presione el atajo nuevo para «{action}».": "Press the new shortcut for “{action}”.",
+    "{key} se lo quitó a «{action}».": "{key} was taken from “{action}”.",
+    # consumo
+    "… y {n} procesos más": "… and {n} more processes",
+    "Panel {i}": "Pane {i}",
+    "Hilo (toda la app): {mem}": "Hilo (whole app): {mem}",
+    # errores y línea de comandos
+    "La versión nueva de Hilo tiene un error y no se aplicó.":
+        "The new version of Hilo has an error and was not applied.",
+    "hilo: no se pudo retomar el panel {id}: {e}": "hilo: could not take over pane {id}: {e}",
+    "hilo: no se pudo archivar el panel: {e}": "hilo: could not archive the pane: {e}",
+    "hilo: no se pudo leer el relevo: {e}": "hilo: could not read the handover file: {e}",
+    "hilo: no se pudo guardar la configuración: {e}": "hilo: could not save the settings: {e}",
+    "hilo: no se pudo guardar el historial: {e}": "hilo: could not save the history: {e}",
+    "hilo: no se pudo guardar el texto: {e}": "hilo: could not save the text: {e}",
+    "hilo: no se pudo guardar la sesión: {e}": "hilo: could not save the session: {e}",
+    "USO": (
+        "Usage: hilo [--fresh | --history [N] | --closed | --update]\n\n"
+        "  --fresh        open without restoring the saved session\n"
+        "  --update       apply the new version to the running Hilo, without closing anything\n"
+        "  --history N    last N Claude sessions with the command to resume them (20)\n"
+        "  --closed       saved closed panes\n"
+        "\nSession: {state}\nHistory: {history}\nSettings: {config}"),
+    "Todavía no hay sesiones de Claude registradas.": "No Claude sessions recorded yet.",
+    "abierta": "open",
+    "cerrada": "closed",
+    "No hay paneles cerrados guardados.": "No saved closed panes.",
+    "texto": "text",
+    "Hilo no está abierta.": "Hilo is not running.",
+    "Listo: Hilo se actualizó sin cerrar nada.": "Done: Hilo updated without closing anything.",
+}
+
+ES = {
+    "USO": (
+        "Uso: hilo [--fresh | --historial [N] | --cerradas | --actualizar]\n\n"
+        "  --fresh        abrir sin restaurar la sesión guardada\n"
+        "  --actualizar   aplicar la versión nueva a la Hilo abierta, sin cerrar nada\n"
+        "  --historial N  últimas N sesiones de Claude con su comando para reanudar (20)\n"
+        "  --cerradas     paneles cerrados guardados\n"
+        "\nSesión: {state}\nHistorial: {history}\nConfiguración: {config}"),
+}
+
+
+def T(text, **kw):
+    """Texto de la interfaz en el idioma elegido; los {campos} se llenan con kw."""
+    out = EN.get(text, text) if LANG == "en" else ES.get(text, text)
+    return out.format(**kw) if kw else out
+
+
+def T_count(n, one, many):
+    """Singular o plural según n (los textos plurales llevan {n})."""
+    return T(one) if n == 1 else T(many, n=n)
+
+
+def decimal(text):
+    """Coma decimal en español, punto en inglés."""
+    return text.replace(".", ",") if LANG == "es" else text
+
+
 # ---------------------------------------------------------------- utilidades
 
 # (acción, descripción, atajos por defecto en formato GTK)
 ACTIONS = [
-    ("new_tab", "Nueva pestaña", ["<Control>t", "<Control><Shift>t"]),
-    ("new_window", "Nueva ventana", ["<Control><Shift>n"]),
-    ("split_right", "Dividir panel a la derecha", ["<Control><Shift>e"]),
-    ("split_down", "Dividir panel hacia abajo", ["<Control><Shift>o"]),
-    ("close_pane", "Cerrar panel (o la pestaña si es el único)", ["<Control><Shift>w"]),
-    ("zoom_pane", "Maximizar / restaurar panel", ["<Control><Shift>x"]),
-    ("detach_pane", "Mover panel a una pestaña nueva", []),
-    ("focus_left", "Ir al panel de la izquierda", ["<Alt>Left"]),
-    ("focus_right", "Ir al panel de la derecha", ["<Alt>Right"]),
-    ("focus_up", "Ir al panel de arriba", ["<Alt>Up"]),
-    ("focus_down", "Ir al panel de abajo", ["<Alt>Down"]),
-    ("close_tab", "Cerrar pestaña completa", []),
-    ("close_window", "Cerrar ventana", ["<Control><Shift>q"]),
-    ("copy", "Copiar", ["<Control><Shift>c"]),
-    ("paste", "Pegar", ["<Control><Shift>v"]),
-    ("search", "Buscar", ["<Control><Shift>f"]),
-    ("next_tab", "Pestaña siguiente", ["<Control>Page_Down"]),
-    ("prev_tab", "Pestaña anterior", ["<Control>Page_Up"]),
-    ("move_tab_right", "Mover pestaña a la derecha", ["<Control><Shift>Page_Down"]),
-    ("move_tab_left", "Mover pestaña a la izquierda", ["<Control><Shift>Page_Up"]),
-    ("rename_tab", "Renombrar pestaña", []),
-    ("zoom_in", "Agrandar texto", ["<Control>plus", "<Control>equal", "<Control>KP_Add", "<Control><Shift>plus"]),
-    ("zoom_out", "Achicar texto", ["<Control>minus", "<Control>KP_Subtract"]),
-    ("zoom_reset", "Tamaño normal", ["<Control>0", "<Control>KP_0"]),
-    ("toggle_tabs", "Ocultar / mostrar las pestañas", ["<Control><Shift>h"]),
-    ("fullscreen", "Pantalla completa", ["F11"]),
-    ("preferences", "Preferencias", ["<Control>comma"]),
-    ("show_help", "Ver atajos y controles", ["<Control><Shift>question"]),
-    ("apply_update", "Aplicar actualización de Hilo sin cerrar nada", []),
+    ("new_tab", T("Nueva pestaña"), ["<Control>t", "<Control><Shift>t"]),
+    ("new_window", T("Nueva ventana"), ["<Control><Shift>n"]),
+    ("split_right", T("Dividir panel a la derecha"), ["<Control><Shift>e"]),
+    ("split_down", T("Dividir panel hacia abajo"), ["<Control><Shift>o"]),
+    ("close_pane", T("Cerrar panel (o la pestaña si es el único)"), ["<Control><Shift>w"]),
+    ("zoom_pane", T("Maximizar / restaurar panel"), ["<Control><Shift>x"]),
+    ("detach_pane", T("Mover panel a una pestaña nueva"), []),
+    ("focus_left", T("Ir al panel de la izquierda"), ["<Alt>Left"]),
+    ("focus_right", T("Ir al panel de la derecha"), ["<Alt>Right"]),
+    ("focus_up", T("Ir al panel de arriba"), ["<Alt>Up"]),
+    ("focus_down", T("Ir al panel de abajo"), ["<Alt>Down"]),
+    ("close_tab", T("Cerrar pestaña completa"), []),
+    ("close_window", T("Cerrar ventana"), ["<Control><Shift>q"]),
+    ("copy", T("Copiar"), ["<Control><Shift>c"]),
+    ("paste", T("Pegar"), ["<Control><Shift>v"]),
+    ("search", T("Buscar"), ["<Control><Shift>f"]),
+    ("next_tab", T("Pestaña siguiente"), ["<Control>Page_Down"]),
+    ("prev_tab", T("Pestaña anterior"), ["<Control>Page_Up"]),
+    ("move_tab_right", T("Mover pestaña a la derecha"), ["<Control><Shift>Page_Down"]),
+    ("move_tab_left", T("Mover pestaña a la izquierda"), ["<Control><Shift>Page_Up"]),
+    ("rename_tab", T("Renombrar pestaña"), []),
+    ("zoom_in", T("Agrandar texto"), ["<Control>plus", "<Control>equal", "<Control>KP_Add", "<Control><Shift>plus"]),
+    ("zoom_out", T("Achicar texto"), ["<Control>minus", "<Control>KP_Subtract"]),
+    ("zoom_reset", T("Tamaño normal"), ["<Control>0", "<Control>KP_0"]),
+    ("toggle_tabs", T("Ocultar / mostrar las pestañas"), ["<Control><Shift>h"]),
+    ("fullscreen", T("Pantalla completa"), ["F11"]),
+    ("preferences", T("Preferencias"), ["<Control>comma"]),
+    ("show_help", T("Ver atajos y controles"), ["<Control><Shift>question"]),
+    ("apply_update", T("Aplicar actualización de Hilo sin cerrar nada"), []),
 ]
 
 # Cómo se agrupan las acciones en la ventana de atajos y controles.
 HELP_GROUPS = [
-    ("Pestañas", ["new_tab", "close_tab", "next_tab", "prev_tab", "move_tab_right", "move_tab_left",
+    (T("Pestañas"), ["new_tab", "close_tab", "next_tab", "prev_tab", "move_tab_right", "move_tab_left",
                   "rename_tab", "toggle_tabs"]),
-    ("Paneles", ["split_right", "split_down", "focus_left", "focus_right", "focus_up", "focus_down",
+    (T("Paneles"), ["split_right", "split_down", "focus_left", "focus_right", "focus_up", "focus_down",
                  "zoom_pane", "detach_pane", "close_pane"]),
-    ("Texto", ["copy", "paste", "search", "zoom_in", "zoom_out", "zoom_reset"]),
-    ("Ventana", ["new_window", "close_window", "fullscreen", "preferences", "show_help", "apply_update"]),
+    (T("Texto"), ["copy", "paste", "search", "zoom_in", "zoom_out", "zoom_reset"]),
+    (T("Ventana"), ["new_window", "close_window", "fullscreen", "preferences", "show_help", "apply_update"]),
 ]
 # Lo que no se configura: teclas fijas y gestos con el mouse.
 HELP_FIXED = [
-    ("Ir a la pestaña 1 a 9", "Alt+1 … Alt+9"),
-    ("Seleccionar texto", "Arrastrar con el mouse"),
-    ("Seleccionar dentro de un programa que usa el mouse (Claude, vim)", "Shift + arrastrar"),
-    ("Seleccionar palabra / línea", "Doble clic / triple clic"),
-    ("Abrir un enlace", "Ctrl + clic"),
-    ("Menú del panel", "Clic derecho"),
-    ("Renombrar pestaña", "Doble clic en la pestaña"),
-    ("Volver una pestaña panel", "Arrastrar la pestaña sobre la terminal"),
-    ("Pasar una pestaña a otra ventana", "Arrastrarla a la otra ventana"),
-    ("Abrir una pestaña en ventana nueva", "Soltarla fuera de toda ventana"),
-    ("Cambiar el tamaño de los paneles", "Arrastrar la línea divisoria"),
+    (T("Ir a la pestaña 1 a 9"), "Alt+1 … Alt+9"),
+    (T("Seleccionar texto"), T("Arrastrar con el mouse")),
+    (T("Seleccionar dentro de un programa que usa el mouse (Claude, vim)"), T("Shift + arrastrar")),
+    (T("Seleccionar palabra / línea"), T("Doble clic / triple clic")),
+    (T("Abrir un enlace"), T("Ctrl + clic")),
+    (T("Menú del panel"), T("Clic derecho")),
+    (T("Renombrar pestaña"), T("Doble clic en la pestaña")),
+    (T("Volver una pestaña panel"), T("Arrastrar la pestaña sobre la terminal")),
+    (T("Pasar una pestaña a otra ventana"), T("Arrastrarla a la otra ventana")),
+    (T("Abrir una pestaña en ventana nueva"), T("Soltarla fuera de toda ventana")),
+    (T("Cambiar el tamaño de los paneles"), T("Arrastrar la línea divisoria")),
 ]
 MODIFIER_KEYS = {"Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R", "Meta_L", "Meta_R",
                  "Super_L", "Super_R", "Hyper_L", "Hyper_R", "ISO_Level3_Shift", "ISO_Level5_Shift",
@@ -437,12 +646,12 @@ def system_sample(prev):
 def fmt_mem(kb):
     mb = kb / 1024
     if mb >= 1024:
-        return f"{mb / 1024:.1f} GB".replace(".", ",")
+        return decimal(f"{mb / 1024:.1f} GB")
     return f"{mb:.0f} MB"
 
 
 def fmt_cpu(pct):
-    return f"{pct:.0f} %" if pct >= 10 or pct == 0 else f"{pct:.1f} %".replace(".", ",")
+    return f"{pct:.0f} %" if pct >= 10 or pct == 0 else decimal(f"{pct:.1f} %")
 
 
 def pretty_dir(path):
@@ -593,7 +802,7 @@ class Pane:
                 if text:
                     when = time.strftime("%d %b %H:%M", time.localtime(self.saved_at)) if self.saved_at else ""
                     self.term.feed((text.replace("\r\n", "\n").replace("\n", "\r\n") + "\r\n").encode())
-                    self.term.feed(f"\x1b[2m──── sesión restaurada {when} ────\x1b[0m\r\n".encode())
+                    self.term.feed(f"\x1b[2m──── {T('sesión restaurada {when}', when=when)} ────\x1b[0m\r\n".encode())
                 if self.consume_scroll:
                     for p in (self.restore_scroll, self.restore_scroll[:-4] + ".json"):
                         if os.path.exists(p):
@@ -613,7 +822,7 @@ class Pane:
             self.term.set_pty(pty)
             self.term.watch_child(r["pid"])
         except (GLib.Error, KeyError, TypeError) as e:
-            print(f"hilo: no se pudo retomar el panel {self.id}: {e}", file=sys.stderr)
+            print(T("hilo: no se pudo retomar el panel {id}: {e}", id=self.id, e=e), file=sys.stderr)
             return False
         self.pid = r["pid"]
         self.cmd = self.restore_cmd
@@ -686,7 +895,7 @@ class Pane:
 
     def on_spawned(self, term, pid, error, *_):
         if error or pid <= 0:
-            term.feed(f"\r\nNo se pudo abrir la shell: {error}\r\n".encode())
+            term.feed(f"\r\n{T('No se pudo abrir la shell: {error}', error=error)}\r\n".encode())
             return
         self.pid = pid
         rc = self.restore_cmd
@@ -809,7 +1018,7 @@ class Pane:
                     if os.path.exists(p):
                         os.unlink(p)
         except OSError as e:
-            print(f"hilo: no se pudo archivar el panel: {e}", file=sys.stderr)
+            print(T("hilo: no se pudo archivar el panel: {e}", e=e), file=sys.stderr)
 
     def dump_scroll(self, force=False):
         if not (self.scroll_dirty or force):
@@ -906,7 +1115,7 @@ class Pane:
     def request_close(self):
         """Cierra solo este panel (si es el único, se cierra la pestaña)."""
         if self.foreground_running() and not self.win.confirm(
-                "Hay un proceso corriendo en este panel.", "Cerrar panel"):
+                T("Hay un proceso corriendo en este panel."), T("Cerrar panel")):
             return
         self.kill()
         self.tab.remove_pane(self, user=True)
@@ -981,7 +1190,7 @@ class Tab:
         close = Gtk.Button.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU)
         close.set_relief(Gtk.ReliefStyle.NONE)
         close.set_focus_on_click(False)
-        close.set_tooltip_text("Cerrar pestaña (todos sus paneles)")
+        close.set_tooltip_text(T("Cerrar pestaña (todos sus paneles)"))
         close.connect("clicked", lambda *_: self.request_close())
         self.usage_label = Gtk.Label(xalign=1, ellipsize=Pango.EllipsizeMode.END, width_chars=13, max_width_chars=13)
         self.usage_label.get_style_context().add_class("dim-label")
@@ -1322,7 +1531,8 @@ class Tab:
     def request_close(self):
         running = self.foreground_running()
         if running and not self.win.confirm(
-                f"Hay {running} proceso(s) corriendo en esta pestaña.", "Cerrar pestaña"):
+                T_count(running, "Hay un proceso corriendo en esta pestaña.",
+                        "Hay {n} procesos corriendo en esta pestaña."), T("Cerrar pestaña")):
             return
         for p in list(self.panes):
             if p.live_claude:
@@ -1381,20 +1591,20 @@ class TermWindow(Gtk.ApplicationWindow):
         self.hide_btn = Gtk.Button.new_from_icon_name("view-conceal-symbolic", Gtk.IconSize.MENU)
         self.hide_btn.connect("clicked", lambda *_: self.app.toggle_tabs())
         bar_btns = Gtk.Box(spacing=0)
-        self.update_btn = Gtk.Button(label="Actualizar")
+        self.update_btn = Gtk.Button(label=T("Actualizar"))
         self.update_btn.get_style_context().add_class("hilo-update")
         self.update_btn.set_focus_on_click(False)
         self.update_btn.set_valign(Gtk.Align.CENTER)
         self.update_btn.set_margin_end(8)
-        self.update_btn.set_tooltip_text("Hay una versión nueva de Hilo. Se aplica sin cerrar nada: "
-                                         "las shells, Claude y lo que esté corriendo siguen vivos.")
+        self.update_btn.set_tooltip_text(T("Hay una versión nueva de Hilo. Se aplica sin cerrar nada: "
+                                           "las shells, Claude y lo que esté corriendo siguen vivos."))
         self.update_btn.connect("clicked", lambda *_: self.app.hot_reload())
         self.update_btn.set_no_show_all(True)
         bar_btns.pack_start(self.update_btn, False, False, 0)
         # Consumo de todo el equipo (CPU, temperatura y RAM).
         self.sys_label = Gtk.Label(margin_end=10)
         self.sys_label.get_style_context().add_class("hilo-sys")
-        self.sys_label.set_tooltip_text("Todo el equipo: uso de CPU, temperatura del procesador y RAM usada / total")
+        self.sys_label.set_tooltip_text(T("Todo el equipo: uso de CPU, temperatura del procesador y RAM usada / total"))
         bar_btns.pack_start(self.sys_label, False, False, 0)
         for b in (self.plus_btn, self.prefs_btn, self.help_btn, self.hide_btn):
             b.set_relief(Gtk.ReliefStyle.NONE)
@@ -1406,7 +1616,7 @@ class TermWindow(Gtk.ApplicationWindow):
         self.update_update_btn()
         self.update_bar_tooltips()
 
-        self.search = Gtk.SearchEntry(placeholder_text="Buscar en el panel (Enter: anterior, Shift+Enter: siguiente)")
+        self.search = Gtk.SearchEntry(placeholder_text=T("Buscar en el panel (Enter: anterior, Shift+Enter: siguiente)"))
         self.search.connect("search-changed", self.on_search_changed)
         self.search.connect("activate", lambda *_: self.search_step(back=True))
         self.search.connect("key-press-event", self.on_search_key)
@@ -1580,10 +1790,10 @@ class TermWindow(Gtk.ApplicationWindow):
         def tip(text, action):
             hint = self.accel_hint(action)
             return f"{text} ({hint})" if hint else text
-        self.plus_btn.set_tooltip_text(tip("Nueva pestaña", "new_tab"))
-        self.prefs_btn.set_tooltip_text(tip("Preferencias", "preferences"))
-        self.help_btn.set_tooltip_text(tip("Atajos y controles", "show_help"))
-        self.hide_btn.set_tooltip_text(tip("Ocultar las pestañas", "toggle_tabs"))
+        self.plus_btn.set_tooltip_text(tip(T("Nueva pestaña"), "new_tab"))
+        self.prefs_btn.set_tooltip_text(tip(T("Preferencias"), "preferences"))
+        self.help_btn.set_tooltip_text(tip(T("Atajos y controles"), "show_help"))
+        self.hide_btn.set_tooltip_text(tip(T("Ocultar las pestañas"), "toggle_tabs"))
 
     def refresh_titles(self):
         for t in self.tabs:
@@ -1598,7 +1808,7 @@ class TermWindow(Gtk.ApplicationWindow):
             shown = (f"{'⤢ ' if t.zoomed else ''}▦ {n}   " if n > 1 else "") + title
             if t.label.get_text() != shown:
                 t.label.set_text(shown)
-            tip = title + (f"\n{n} paneles" if n > 1 else "")
+            tip = title + ("\n" + T("{n} paneles", n=n) if n > 1 else "")
             if t.usage:
                 ram, cpu, detail = t.usage
                 text = f"{fmt_mem(ram)} · {fmt_cpu(cpu)}"
@@ -1619,7 +1829,7 @@ class TermWindow(Gtk.ApplicationWindow):
                 if len(self.tabs) > 1:
                     title = f"[{self.nb.page_num(cur.widget) + 1}/{len(self.tabs)}]  {title}"
                 if len(cur.panes) > 1:
-                    title += f"  ·  {len(cur.panes)} paneles"
+                    title += "  ·  " + T("{n} paneles", n=len(cur.panes))
                 if cur.usage:
                     title += f"  —  {fmt_mem(cur.usage[0])} · {fmt_cpu(cur.usage[1])}"
             self.set_title(title)
@@ -1648,18 +1858,18 @@ class TermWindow(Gtk.ApplicationWindow):
     def confirm(self, text, action):
         d = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.QUESTION,
                               buttons=Gtk.ButtonsType.NONE, text=text)
-        d.add_buttons("Cancelar", Gtk.ResponseType.CANCEL, action, Gtk.ResponseType.ACCEPT)
+        d.add_buttons(T("Cancelar"), Gtk.ResponseType.CANCEL, action, Gtk.ResponseType.ACCEPT)
         d.set_default_response(Gtk.ResponseType.CANCEL)
         ok = d.run() == Gtk.ResponseType.ACCEPT
         d.destroy()
         return ok
 
     def rename_tab(self, tab):
-        d = Gtk.Dialog(title="Renombrar pestaña", transient_for=self, modal=True)
-        d.add_buttons("Cancelar", Gtk.ResponseType.CANCEL, "Guardar", Gtk.ResponseType.OK)
+        d = Gtk.Dialog(title=T("Renombrar pestaña"), transient_for=self, modal=True)
+        d.add_buttons(T("Cancelar"), Gtk.ResponseType.CANCEL, T("Guardar"), Gtk.ResponseType.OK)
         d.set_default_response(Gtk.ResponseType.OK)
         e = Gtk.Entry(text=tab.custom_title or "", activates_default=True,
-                      placeholder_text="Vacío = nombre automático")
+                      placeholder_text=T("Vacío = nombre automático"))
         e.set_margin_start(12); e.set_margin_end(12); e.set_margin_top(12); e.set_margin_bottom(12)
         d.get_content_area().add(e)
         d.show_all()
@@ -1678,24 +1888,24 @@ class TermWindow(Gtk.ApplicationWindow):
         m = Gtk.Menu()
         multi = len(tab.panes) > 1
         items = [
-            ("Copiar", "copy", lambda: pane.term.copy_clipboard_format(Vte.Format.TEXT), pane.term.get_has_selection()),
-            ("Pegar", "paste", lambda: pane.term.paste_clipboard(), True),
+            (T("Copiar"), "copy", lambda: pane.term.copy_clipboard_format(Vte.Format.TEXT), pane.term.get_has_selection()),
+            (T("Pegar"), "paste", lambda: pane.term.paste_clipboard(), True),
             None,
-            ("Dividir a la derecha", "split_right", lambda: tab.split(pane, "h"), True),
-            ("Dividir hacia abajo", "split_down", lambda: tab.split(pane, "v"), True),
-            ("Restaurar paneles" if tab.zoomed else "Maximizar panel", "zoom_pane", tab.toggle_zoom, multi),
-            ("Mover panel a una pestaña nueva", "detach_pane", lambda: tab.detach_pane(pane), multi),
-            ("Cerrar panel", "close_pane", pane.request_close, multi),
+            (T("Dividir a la derecha"), "split_right", lambda: tab.split(pane, "h"), True),
+            (T("Dividir hacia abajo"), "split_down", lambda: tab.split(pane, "v"), True),
+            (T("Restaurar paneles") if tab.zoomed else T("Maximizar panel"), "zoom_pane", tab.toggle_zoom, multi),
+            (T("Mover panel a una pestaña nueva"), "detach_pane", lambda: tab.detach_pane(pane), multi),
+            (T("Cerrar panel"), "close_pane", pane.request_close, multi),
             None,
-            ("Nueva pestaña", "new_tab", self.new_tab, True),
-            ("Nueva ventana", "new_window", self.app.new_window, True),
-            ("Renombrar pestaña…", "rename_tab", lambda: self.rename_tab(tab), True),
-            ("Cerrar pestaña", "close_tab", tab.request_close, True),
-            ("Mostrar las pestañas" if self.app.config["tabs_hidden"] else "Ocultar las pestañas",
+            (T("Nueva pestaña"), "new_tab", self.new_tab, True),
+            (T("Nueva ventana"), "new_window", self.app.new_window, True),
+            (T("Renombrar pestaña…"), "rename_tab", lambda: self.rename_tab(tab), True),
+            (T("Cerrar pestaña"), "close_tab", tab.request_close, True),
+            (T("Mostrar las pestañas") if self.app.config["tabs_hidden"] else T("Ocultar las pestañas"),
              "toggle_tabs", self.app.toggle_tabs, True),
             None,
-            ("Preferencias…", "preferences", self.app.show_preferences, True),
-        ] + ([("Aplicar actualización de Hilo", "apply_update", self.app.hot_reload, True)]
+            (T("Preferencias…"), "preferences", self.app.show_preferences, True),
+        ] + ([(T("Aplicar actualización de Hilo"), "apply_update", self.app.hot_reload, True)]
              if self.app.update_ready else []) + [
         ]
         hist = self.app.recent_claude(15)
@@ -1719,8 +1929,8 @@ class TermWindow(Gtk.ApplicationWindow):
             m.append(mi)
         m.append(Gtk.SeparatorMenuItem())
         for title, entries, fn, empty in (
-                ("Sesiones de Claude", hist, self.resume_claude, "Sin sesiones registradas"),
-                ("Paneles cerrados", closed, self.reopen_closed, "No hay paneles cerrados")):
+                (T("Sesiones de Claude"), hist, self.resume_claude, T("Sin sesiones registradas")),
+                (T("Paneles cerrados"), closed, self.reopen_closed, T("No hay paneles cerrados"))):
             top = Gtk.MenuItem(label=title)
             sub = Gtk.Menu()
             for e in entries:
@@ -1878,9 +2088,10 @@ class TermWindow(Gtk.ApplicationWindow):
         """Cerrar con la X. Si es la última ventana, la sesión queda guardada."""
         running = sum(1 for p in self.panes() if p.foreground_running())
         if running and not self.confirm(
-                f"Hay {running} proceso(s) corriendo en esta ventana. "
-                "Si la cierra, se detienen; la sesión se recuerda para la próxima vez.",
-                "Cerrar ventana"):
+                T_count(running, "Hay un proceso corriendo en esta ventana.",
+                        "Hay {n} procesos corriendo en esta ventana.") + " "
+                + T("Si la cierra, se detienen; la sesión se recuerda para la próxima vez."),
+                T("Cerrar ventana")):
             return True
         self.app.close_window(self)
         return True
@@ -1892,12 +2103,12 @@ class HelpWindow(Gtk.Window):
     """Lista de atajos (los vigentes, no los de fábrica) y gestos con el mouse."""
 
     def __init__(self, app):
-        super().__init__(title="Atajos y controles", modal=False)
+        super().__init__(title=T("Atajos y controles"), modal=False)
         self.app = app
         self.set_default_size(560, 680)
         self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
-        hb = Gtk.HeaderBar(show_close_button=True, title="Atajos y controles")
-        edit = Gtk.Button(label="Cambiar atajos…")
+        hb = Gtk.HeaderBar(show_close_button=True, title=T("Atajos y controles"))
+        edit = Gtk.Button(label=T("Cambiar atajos…"))
         edit.connect("clicked", lambda *_: (self.app.show_preferences("atajos"), self.destroy()))
         hb.pack_start(edit)
         self.set_titlebar(hb)
@@ -1908,10 +2119,10 @@ class HelpWindow(Gtk.Window):
             rows = []
             for a in actions:
                 accels = shortcuts.get(a) or []
-                keys = " o ".join(accel_label(x) for x in accels[:2]) if accels else "sin atajo"
+                keys = T(" o ").join(accel_label(x) for x in accels[:2]) if accels else T("sin atajo")
                 rows.append((ACTION_LABELS[a], keys, not accels))
             self.section(box, title, rows)
-        self.section(box, "Teclas fijas y mouse", [(a, b, False) for a, b in HELP_FIXED])
+        self.section(box, T("Teclas fijas y mouse"), [(a, b, False) for a, b in HELP_FIXED])
 
         sc = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
         sc.add(box)
@@ -1939,7 +2150,7 @@ class HelpWindow(Gtk.Window):
 
 class PreferencesWindow(Gtk.Window):
     def __init__(self, app):
-        super().__init__(title="Preferencias de Hilo", modal=False)
+        super().__init__(title=T("Preferencias de Hilo"), modal=False)
         self.app = app
         self.set_default_size(560, 620)
         self.set_type_hint(Gdk.WindowTypeHint.DIALOG)
@@ -1949,8 +2160,8 @@ class PreferencesWindow(Gtk.Window):
         switcher = Gtk.StackSwitcher(stack=stack, halign=Gtk.Align.CENTER)
         hb = Gtk.HeaderBar(show_close_button=True, custom_title=switcher)
         self.set_titlebar(hb)
-        stack.add_titled(self.build_general(), "general", "General")
-        stack.add_titled(self.build_shortcuts(), "atajos", "Atajos")
+        stack.add_titled(self.build_general(), "general", T("General"))
+        stack.add_titled(self.build_shortcuts(), "atajos", T("Atajos"))
         self.add(stack)
         self.connect("key-press-event", self.on_key)
         self.show_all()
@@ -1961,12 +2172,12 @@ class PreferencesWindow(Gtk.Window):
         lb = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
         lb.get_style_context().add_class("frame")
         rows = [
-            ("show_usage", "Mostrar RAM y CPU en las pestañas",
-             "La suma de la shell y de todo lo que corre dentro."),
-            ("show_system", "Mostrar CPU, temperatura y RAM del equipo",
-             "En la barra de pestañas, para todo el equipo."),
-            ("autorun_claude", "Reanudar Claude Code solo al restaurar",
-             "Si se apaga, el comando queda escrito esperando Enter."),
+            ("show_usage", T("Mostrar RAM y CPU en las pestañas"),
+             T("La suma de la shell y de todo lo que corre dentro.")),
+            ("show_system", T("Mostrar CPU, temperatura y RAM del equipo"),
+             T("En la barra de pestañas, para todo el equipo.")),
+            ("autorun_claude", T("Reanudar Claude Code solo al restaurar"),
+             T("Si se apaga, el comando queda escrito esperando Enter.")),
         ]
         for key, title, sub in rows:
             sw = Gtk.Switch(active=bool(self.app.config[key]), valign=Gtk.Align.CENTER)
@@ -1975,12 +2186,18 @@ class PreferencesWindow(Gtk.Window):
         entry = Gtk.Entry(text=", ".join(self.app.config["autorun"]), width_chars=22, valign=Gtk.Align.CENTER)
         entry.connect("changed", lambda e: self.set_option(
             "autorun", [x.strip() for x in e.get_text().split(",") if x.strip()]))
-        lb.add(self.row("Programas que se vuelven a abrir solos",
-                        "Separados por coma. El resto queda escrito esperando Enter.", entry))
+        lb.add(self.row(T("Programas que se vuelven a abrir solos"),
+                        T("Separados por coma. El resto queda escrito esperando Enter."), entry))
+        lang = Gtk.ComboBoxText(valign=Gtk.Align.CENTER)
+        for code, name in (("auto", T("Automático (el del sistema)")), ("es", "Español"), ("en", "English")):
+            lang.append(code, name)
+        lang.set_active_id(self.app.config.get("language", "auto"))
+        lang.connect("changed", lambda c: self.set_language(c.get_active_id()))
+        lb.add(self.row(T("Idioma"), T("Se aplica al momento, sin cerrar nada."), lang))
         box.pack_start(lb, False, False, 0)
         info = Gtk.Label(xalign=0, wrap=True, margin_top=14)
         info.get_style_context().add_class("dim-label")
-        info.set_markup(f"<small>La configuración se guarda en {GLib.markup_escape_text(pretty_dir(CONFIG_FILE))}</small>")
+        info.set_markup("<small>" + GLib.markup_escape_text(T("La configuración se guarda en {path}", path=pretty_dir(CONFIG_FILE))) + "</small>")
         box.pack_start(info, False, False, 0)
         return box
 
@@ -2015,6 +2232,15 @@ class PreferencesWindow(Gtk.Window):
                         p.usage = None
                 w.refresh_titles()
 
+    def set_language(self, code):
+        if not code or code == self.app.config.get("language", "auto"):
+            return
+        self.app.config["language"] = code
+        self.app.save_config()
+        # Los textos se eligen al arrancar: una actualización en caliente los cambia
+        # sin cerrar ninguna terminal, y Preferencias se vuelve a abrir donde estaba.
+        GLib.idle_add(lambda: self.app.hot_reload(reopen="general") and False)
+
     # -- atajos
     def build_shortcuts(self):
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=18)
@@ -2030,7 +2256,7 @@ class PreferencesWindow(Gtk.Window):
             btn.connect("clicked", lambda b, a=action: self.start_capture(a, b))
             reset = Gtk.Button.new_from_icon_name("edit-undo-symbolic", Gtk.IconSize.BUTTON)
             reset.set_relief(Gtk.ReliefStyle.NONE)
-            reset.set_tooltip_text("Volver al atajo original")
+            reset.set_tooltip_text(T("Volver al atajo original"))
             reset.set_valign(Gtk.Align.CENTER)
             reset.connect("clicked", lambda _b, a=action: self.reset(a))
             controls = Gtk.Box(spacing=4)
@@ -2040,18 +2266,18 @@ class PreferencesWindow(Gtk.Window):
             lb.add(self.row(label, None, controls))
         fixed = Gtk.Label(label="Alt+1 … Alt+9", xalign=1)
         fixed.get_style_context().add_class("dim-label")
-        lb.add(self.row("Ir a la pestaña 1 a 9", None, fixed))
+        lb.add(self.row(T("Ir a la pestaña 1 a 9"), None, fixed))
         self.refresh_buttons()
         sc = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
         sc.add(lb)
         outer.pack_start(sc, True, True, 0)
-        reset_all = Gtk.Button(label="Restablecer todos los atajos", halign=Gtk.Align.END)
+        reset_all = Gtk.Button(label=T("Restablecer todos los atajos"), halign=Gtk.Align.END)
         reset_all.connect("clicked", lambda *_: self.reset(None))
         outer.pack_start(reset_all, False, False, 0)
         return outer
 
     def set_hint(self, text=None):
-        self.hint.set_markup("<small>" + GLib.markup_escape_text(text or (
+        self.hint.set_markup("<small>" + GLib.markup_escape_text(text or T(
             "Haga clic en un atajo y presione la combinación nueva. "
             "Esc cancela, Retroceso lo deja sin atajo.")) + "</small>")
 
@@ -2059,17 +2285,17 @@ class PreferencesWindow(Gtk.Window):
         for action, (btn, reset) in self.buttons.items():
             accels = self.app.config["shortcuts"].get(action) or []
             if self.capturing and self.capturing[0] == action:
-                btn.set_label("Presione la combinación…")
+                btn.set_label(T("Presione la combinación…"))
             else:
-                btn.set_label(" · ".join(accel_label(a) for a in accels[:2]) or "Sin atajo")
+                btn.set_label(" · ".join(accel_label(a) for a in accels[:2]) or T("Sin atajo"))
             extra = accels[2:]
-            btn.set_tooltip_text(("También: " + ", ".join(accel_label(a) for a in extra)) if extra else None)
+            btn.set_tooltip_text((T("También: ") + ", ".join(accel_label(a) for a in extra)) if extra else None)
             reset.set_sensitive(accels != DEFAULT_SHORTCUTS[action])
 
     def start_capture(self, action, btn):
         self.capturing = (action, btn)
         self.refresh_buttons()
-        self.set_hint(f"Presione el atajo nuevo para «{ACTION_LABELS[action]}».")
+        self.set_hint(T("Presione el atajo nuevo para «{action}».", action=ACTION_LABELS[action]))
 
     def reset(self, action):
         targets = [action] if action else list(DEFAULT_SHORTCUTS)
@@ -2105,7 +2331,7 @@ class PreferencesWindow(Gtk.Window):
             for other, accels in self.app.config["shortcuts"].items():
                 if other != action and any(accel_key(a) == key for a in accels):
                     self.app.config["shortcuts"][other] = [a for a in accels if accel_key(a) != key]
-                    msg = f"{accel_label(accel)} se lo quitó a «{ACTION_LABELS[other]}»."
+                    msg = T("{key} se lo quitó a «{action}».", key=accel_label(accel), action=ACTION_LABELS[other])
             self.app.config["shortcuts"][action] = [accel]
             self.app.save_config()
             self.set_hint(msg)
@@ -2187,7 +2413,7 @@ class HiloApp(Gtk.Application):
                     state = json.load(f)
                 state["saved_at"] = None
             except (OSError, ValueError) as e:
-                print(f"hilo: no se pudo leer el relevo: {e}", file=sys.stderr)
+                print(T("hilo: no se pudo leer el relevo: {e}", e=e), file=sys.stderr)
             finally:
                 try:
                     os.unlink(self.relevo_in)
@@ -2198,6 +2424,9 @@ class HiloApp(Gtk.Application):
             self.saved_at = state.get("saved_at")
             for w in state["windows"]:
                 self.spawn_window(w)
+            if state.get("reopen_prefs"):
+                page = state["reopen_prefs"]
+                GLib.idle_add(lambda: self.show_preferences(page) and False)
         else:
             self.new_window()
 
@@ -2297,7 +2526,7 @@ class HiloApp(Gtk.Application):
         try:
             save_config(self.config)
         except OSError as e:
-            print(f"hilo: no se pudo guardar la configuración: {e}", file=sys.stderr)
+            print(T("hilo: no se pudo guardar la configuración: {e}", e=e), file=sys.stderr)
 
     def show_preferences(self, page=None):
         if self.prefs is None:
@@ -2372,13 +2601,13 @@ class HiloApp(Gtk.Application):
                 all_rows.sort(key=lambda r: (round(r[1], 1), r[0]), reverse=True)
                 lines = [f"{fmt_mem(r[0]):>8}  {fmt_cpu(r[1]):>6}  {r[2]}" for r in all_rows[:6]]
                 if len(all_rows) > 6:
-                    lines.append(f"… y {len(all_rows) - 6} procesos más")
+                    lines.append(T("… y {n} procesos más", n=len(all_rows) - 6))
                 if len(t.panes) > 1:
                     lines.append("")
                     for i, p in enumerate(t.leaf_order(), 1):
                         if p.usage:
-                            lines.append(f"Panel {i}: {fmt_mem(p.usage[0])} · {fmt_cpu(p.usage[1])}  ({p.title()})")
-                lines.append(f"\nHilo (toda la app): {fmt_mem(own)}")
+                            lines.append(f"{T('Panel {i}', i=i)}: {fmt_mem(p.usage[0])} · {fmt_cpu(p.usage[1])}  ({p.title()})")
+                lines.append("\n" + T("Hilo (toda la app): {mem}", mem=fmt_mem(own)))
                 t.usage = (sum(r[0] for r in all_rows), sum(r[1] for r in all_rows), "\n".join(lines))
         self._usage_t, self._usage_ticks = now, ticks_now
 
@@ -2417,7 +2646,7 @@ class HiloApp(Gtk.Application):
         try:
             atomic_write(HISTORY_FILE, json.dumps(self.history, indent=1, ensure_ascii=False).encode())
         except OSError as e:
-            print(f"hilo: no se pudo guardar el historial: {e}", file=sys.stderr)
+            print(T("hilo: no se pudo guardar el historial: {e}", e=e), file=sys.stderr)
 
     # -- guardado
     def hold_saves(self, seconds):
@@ -2440,7 +2669,7 @@ class HiloApp(Gtk.Application):
         except OSError:
             return None
 
-    def hot_reload(self):
+    def hot_reload(self, reopen=None):
         """Actualización en caliente: el proceso se reemplaza por la versión nueva
         (exec) y le pasa cada pty abierto. El PID no cambia, así que las shells
         siguen siendo hijas de Hilo y nada se cierra."""
@@ -2448,7 +2677,7 @@ class HiloApp(Gtk.Application):
             with open(self.code_path, encoding="utf-8") as f:
                 compile(f.read(), self.code_path, "exec")
         except (OSError, SyntaxError) as e:
-            self.show_error("La versión nueva de Hilo tiene un error y no se aplicó.", str(e))
+            self.show_error(T("La versión nueva de Hilo tiene un error y no se aplicó."), str(e))
             return
         for p in self.all_panes():
             try:
@@ -2460,6 +2689,8 @@ class HiloApp(Gtk.Application):
         try:
             state = {"version": 1, "font_scale": self.font_scale,
                      "windows": [w.serialize() for w in self.windows]}
+            if reopen:
+                state["reopen_prefs"] = reopen
         finally:
             self.relevo_out = False
         path = os.path.join(STATE_DIR, "relevo.json")
@@ -2503,7 +2734,7 @@ class HiloApp(Gtk.Application):
                 try:
                     p.dump_scroll()
                 except OSError as e:
-                    print(f"hilo: no se pudo guardar el texto: {e}", file=sys.stderr)
+                    print(T("hilo: no se pudo guardar el texto: {e}", e=e), file=sys.stderr)
         return True
 
     def save_state(self, force=False):
@@ -2525,7 +2756,7 @@ class HiloApp(Gtk.Application):
             atomic_write(STATE_FILE, json.dumps(state, indent=1, ensure_ascii=False).encode())
             self.last_state_json = body
         except OSError as e:
-            print(f"hilo: no se pudo guardar la sesión: {e}", file=sys.stderr)
+            print(T("hilo: no se pudo guardar la sesión: {e}", e=e), file=sys.stderr)
             return
         self.gc_scroll(live_ids)
 
@@ -2575,21 +2806,19 @@ class HiloApp(Gtk.Application):
 def main():
     args = sys.argv[1:]
     if "-h" in args or "--help" in args:
-        print("Uso: hilo [--fresh | --historial [N] | --cerradas | --actualizar]\n\n"
-              "  --fresh        abrir sin restaurar la sesión guardada\n"
-              "  --actualizar   aplicar la versión nueva a la Hilo abierta, sin cerrar nada\n"
-              "  --historial N  últimas N sesiones de Claude con su comando para reanudar (20)\n"
-              "  --cerradas     pestañas cerradas guardadas\n"
-              f"\nSesión: {STATE_FILE}\nHistorial: {HISTORY_FILE}\nConfiguración: {CONFIG_FILE}")
+        print(T("USO", state=STATE_FILE, history=HISTORY_FILE, config=CONFIG_FILE))
         return 0
+    # Cada opción tiene su nombre en español y en inglés.
+    for es, en in (("--historial", "--history"), ("--cerradas", "--closed"), ("--actualizar", "--update")):
+        args = [es if a == en else a for a in args]
     if "--historial" in args:
         i = args.index("--historial")
         n = int(args[i + 1]) if i + 1 < len(args) and args[i + 1].isdigit() else 20
         hist = sorted(load_history(), key=lambda e: e.get("last_seen") or 0, reverse=True)[:n]
         if not hist:
-            print("Todavía no hay sesiones de Claude registradas.")
+            print(T("Todavía no hay sesiones de Claude registradas."))
         for e in reversed(hist):
-            state = "abierta" if not e.get("ended") else "cerrada"
+            state = T("abierta") if not e.get("ended") else T("cerrada")
             print(f"\033[1m{history_label(e, 110)}\033[0m  [{state}]")
             argv = claude_resume_argv(e.get("argv") or ["claude"], e["id"])
             print(f"  cd {shlex.quote(e.get('cwd') or HOME)} && {shlex.join(argv)}\n")
@@ -2597,24 +2826,24 @@ def main():
     if "--cerradas" in args:
         closed = list_closed()
         if not closed:
-            print("No hay pestañas cerradas guardadas.")
+            print(T("No hay paneles cerrados guardados."))
         for c in reversed(closed):
             when = time.strftime("%d %b %H:%M", time.localtime(c["closed_at"]))
             print(f"\033[1m{when} · {c.get('title') or pretty_dir(c.get('cwd'))}\033[0m")
             for sid in c.get("claude_ids") or []:
                 print(f"  claude --resume {sid}")
-            print(f"  texto: {c['_txt']}\n")
+            print(f"  {T('texto')}: {c['_txt']}\n")
         return 0
     if "--actualizar" in args:
         # Pide a la Hilo abierta que aplique la versión nueva sin cerrar nada.
         client = Gio.Application(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
         client.register(None)
         if not client.get_is_remote():
-            print("Hilo no está abierta.")
+            print(T("Hilo no está abierta."))
             return 1
         client.activate_action("relevo", None)
         client.get_dbus_connection().flush_sync(None)
-        print("Listo: Hilo se actualizó sin cerrar nada.")
+        print(T("Listo: Hilo se actualizó sin cerrar nada."))
         return 0
     GLib.set_prgname(APP_ID)
     GLib.set_application_name("Hilo")

@@ -4,6 +4,8 @@
 
 Terminal para GNOME basada en VTE, el mismo motor de GNOME Terminal, así que se ve y se comporta igual. Además guarda la sesión en disco todo el tiempo, y si el PC se apaga de golpe la recupera al abrirla otra vez.
 
+La interfaz viene en español y en inglés. Sigue el idioma del sistema, y se puede cambiar en Preferencias.
+
 ![Hilo con tres pestañas y una pestaña dividida en tres paneles](docs/screenshots/es/hero.png)
 
 ## Qué se recupera
@@ -49,8 +51,8 @@ Cada pestaña se puede dividir en varios paneles. Cada panel es una terminal ind
 
 Todo esto se conserva aunque cierre la pestaña o la terminal:
 
-- **Sesiones de Claude:** cada sesión que corre en Hilo queda registrada (las últimas 300) con su carpeta, sus banderas, la hora y el primer mensaje que usted escribió, para reconocerla. Para reanudar una, use clic derecho → *Sesiones de Claude*, que la abre en una pestaña nueva en su carpeta, o en la consola `hilo --historial`, que imprime `cd … && claude … --resume <id>` listo para copiar.
-- **Paneles cerrados:** al cerrar un panel o una pestaña se guardan el texto, la carpeta y las sesiones de Claude de cada panel (los últimos 40). Para reabrirlo con el texto de antes, use clic derecho → *Paneles cerrados*, o en la consola `hilo --cerradas`.
+- **Sesiones de Claude:** cada sesión que corre en Hilo queda registrada (las últimas 300) con su carpeta, sus banderas, la hora y el primer mensaje que usted escribió, para reconocerla. Para reanudar una, use clic derecho → *Sesiones de Claude*, que la abre en una pestaña nueva en su carpeta, o en la consola `hilo --historial` (o `--history`), que imprime `cd … && claude … --resume <id>` listo para copiar.
+- **Paneles cerrados:** al cerrar un panel o una pestaña se guardan el texto, la carpeta y las sesiones de Claude de cada panel (los últimos 40). Para reabrirlo con el texto de antes, use clic derecho → *Paneles cerrados*, o en la consola `hilo --cerradas` (o `--closed`).
 
 Solo se registran las sesiones abiertas desde Hilo, no las de GNOME Terminal. Para esas siempre queda `claude --resume`, que las lista todas.
 
@@ -75,7 +77,7 @@ Además: Ctrl+clic abre enlaces, doble clic en la pestaña la renombra y el clic
 
 **Monitor del equipo:** al final de la barra de pestañas Hilo muestra el uso de CPU, la temperatura del procesador y la RAM usada / total de todo el equipo, por ejemplo `CPU 22% · 71°C · 19.0/31.0G`. La temperatura se pone naranja desde 85 °C. Lee `/proc` y los sensores del kernel, así que no necesita nada adicional.
 
-En *General* se activan o desactivan el consumo en las pestañas, el monitor del equipo, la reanudación automática de Claude y la lista de programas que se vuelven a abrir solos.
+En *General* se activan o desactivan el consumo en las pestañas, el monitor del equipo, la reanudación automática de Claude y la lista de programas que se vuelven a abrir solos. Ahí también se elige el idioma (automático, español o inglés); el cambio se aplica al momento, sin cerrar nada.
 
 ![Hilo con la barra de pestañas oculta](docs/screenshots/es/hidden.png)
 
@@ -83,7 +85,7 @@ En *General* se activan o desactivan el consumo en las pestañas, el monitor del
 
 ## Actualizar sin reiniciar
 
-Cuando cambia `hilo.py` (por ejemplo, tras un `git pull`), aparece en la barra de pestañas un botón naranja **Actualizar**. Al hacer clic se aplica la versión nueva sin cerrar nada: Hilo se reemplaza por el código nuevo en el mismo proceso y le entrega cada terminal abierta, así que las shells, las sesiones de Claude y los programas siguen corriendo. También se puede con `hilo --actualizar` desde cualquier terminal, o con clic derecho → *Aplicar actualización de Hilo*.
+Cuando cambia `hilo.py` (por ejemplo, tras un `git pull`), aparece en la barra de pestañas un botón naranja **Actualizar**. Al hacer clic se aplica la versión nueva sin cerrar nada: Hilo se reemplaza por el código nuevo en el mismo proceso y le entrega cada terminal abierta, así que las shells, las sesiones de Claude y los programas siguen corriendo. También se puede con `hilo --actualizar` (o `--update`) desde cualquier terminal, o con clic derecho → *Aplicar actualización de Hilo*.
 
 A los programas a pantalla completa (Claude, vim, less) se les pide que se vuelvan a dibujar. Si la versión nueva tiene un error de sintaxis, no se aplica nada y aparece un aviso.
 
@@ -103,7 +105,7 @@ Usa la fuente, la paleta y el scrollback del perfil por defecto de GNOME Termina
 - Configuración: `~/.config/hilo/config.json`. Se maneja desde Preferencias, y solo guarda lo que cambió respecto a los valores por defecto.
 
 ```json
-{ "show_usage": true, "show_system": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
+{ "language": "auto", "show_usage": true, "show_system": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
   "shortcuts": { "new_tab": ["<Control>t"], "close_tab": ["<Control><Shift>w"] } }
 ```
 

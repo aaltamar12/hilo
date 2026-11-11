@@ -4,7 +4,7 @@
 
 A GNOME terminal built on VTE, the same engine as GNOME Terminal, so it looks and behaves the same. On top of that it keeps saving your session to disk, and if your computer shuts down unexpectedly, everything comes back the next time you open it.
 
-The interface is in Spanish for now.
+The interface comes in English and Spanish. It follows your system language, and you can change it in Preferences.
 
 ![Hilo with three tabs and a tab split into three panes](docs/screenshots/en/hero.png)
 
@@ -41,7 +41,7 @@ Every tab can be split into panes. Each pane is an independent terminal with its
 - Drag the divider to resize.
 - **Drag a tab to turn it into a pane:** grab the tab and drag it over the terminal area. The half of the pane where it will land (left, right, top or bottom, whichever edge is closest) lights up in orange, and when you drop it, it stays there with its shells still running. If the tab had several panes, they all move together. Dragging within the tab bar still reorders tabs.
 - **Between windows:** drop a tab on another window's tab bar to move it there. Drop it on another window's content to make it a pane there. Drop it outside any window to open it in a new window. A window left with no tabs closes itself.
-- **The other way around:** right click → *Mover panel a una pestaña nueva* (move pane to a new tab) pulls it out into its own tab without stopping what's running.
+- **The other way around:** right click → *Move pane to a new tab* pulls it out into its own tab without stopping what's running.
 - A tab with 3 panes shows `▦ 3`. The usage it shows is the sum of all of them; hover to see each pane.
 - Search, copy and paste act on the active pane.
 
@@ -51,33 +51,33 @@ Every tab can be split into panes. Each pane is an independent terminal with its
 
 All of this survives closing the tab or the terminal:
 
-- **Claude sessions:** every session run inside Hilo is recorded (the last 300) with its directory, flags, time and the first message you wrote, so you can recognize it. To resume one, right click → *Sesiones de Claude* (Claude sessions), which opens it in a new tab in its directory, or run `hilo --historial`, which prints `cd … && claude … --resume <id>` ready to copy.
-- **Closed panes:** when you close a pane or a tab, Hilo keeps the text, directory and Claude sessions of each pane (the last 40). To reopen one with its old text, right click → *Paneles cerrados* (closed panes), or run `hilo --cerradas`.
+- **Claude sessions:** every session run inside Hilo is recorded (the last 300) with its directory, flags, time and the first message you wrote, so you can recognize it. To resume one, right click → *Claude sessions*, which opens it in a new tab in its directory, or run `hilo --history`, which prints `cd … && claude … --resume <id>` ready to copy.
+- **Closed panes:** when you close a pane or a tab, Hilo keeps the text, directory and Claude sessions of each pane (the last 40). To reopen one with its old text, right click → *Closed panes*, or run `hilo --closed`.
 
 Only sessions started from Hilo are recorded, not the ones from GNOME Terminal. For those you still have `claude --resume`, which lists them all.
 
 ## When a tab is forgotten
 
-- Typing `exit`, Ctrl+Shift+W or the X on the tab: the session ends, but it stays under *Paneles cerrados*.
+- Typing `exit`, Ctrl+Shift+W or the X on the tab: the session ends, but it stays under *Closed panes*.
 - Closing the **last window** with its X: it's remembered and comes back next time.
 - Closing a window while others are open: that window is forgotten.
 - Shutdown, logout or power cut: it's remembered.
 
-To open without restoring: `hilo --fresh`, or the "Abrir sin restaurar" (open without restoring) action in the app icon's menu.
+To open without restoring: `hilo --fresh`, or the "Open without restoring" action in the app icon's menu.
 
 ## Shortcuts
 
-Change them in **Preferences** (Ctrl+, or right click → *Preferencias…*), *Atajos* tab: click a shortcut and press the new combination. Esc cancels and Backspace leaves it without a shortcut. If another action was using that combination, it's removed from it and you get a notice. The ↺ arrow restores the default.
+Change them in **Preferences** (Ctrl+, or right click → *Preferences…*), *Shortcuts* tab: click a shortcut and press the new combination. Esc cancels and Backspace leaves it without a shortcut. If another action was using that combination, it's removed from it and you get a notice. The ↺ arrow restores the default.
 
 Defaults: Ctrl+T or Ctrl+Shift+T new tab (same directory) · Ctrl+Shift+E / O split right / down · Alt+arrows switch pane · Ctrl+Shift+X maximize pane · Ctrl+Shift+W close pane · Ctrl+Shift+N new window · Ctrl+Shift+Q close window · Ctrl+Shift+C/V copy/paste · Ctrl+Shift+F search · Ctrl+PgUp/PgDn switch tab · Ctrl+Shift+PgUp/PgDn move tab · Alt+1…9 go to tab (fixed) · Ctrl + / − / 0 zoom · Ctrl+Shift+H hide or show tabs · F11 fullscreen · Ctrl+, preferences · Ctrl+Shift+? shortcuts and controls.
 
-**Tab bar buttons:** **+** opens a new tab, the gear opens Preferences, and the keyboard shows every current shortcut plus the mouse gestures. **Hidden tabs:** the eye button hides the whole bar, buttons included. To bring it back: Ctrl+Shift+H, or right click → *Mostrar las pestañas* (show tabs). With the bar hidden everything still works from the keyboard, and the window title shows which tab you're on, for example `[2/5]`. This is remembered across restarts.
+**Tab bar buttons:** **+** opens a new tab, the gear opens Preferences, and the keyboard shows every current shortcut plus the mouse gestures. **Hidden tabs:** the eye button hides the whole bar, buttons included. To bring it back: Ctrl+Shift+H, or right click → *Show tabs*. With the bar hidden everything still works from the keyboard, and the window title shows which tab you're on, for example `[2/5]`. This is remembered across restarts.
 
 Also: Ctrl+click opens links, double-clicking a tab renames it, and right click opens the menu.
 
 **Whole-system monitor:** at the end of the tab bar Hilo shows CPU use, processor temperature and used / total RAM for the whole computer, for example `CPU 22% · 71°C · 19.0/31.0G`. The temperature turns orange from 85 °C. It reads `/proc` and the kernel's sensors, so it needs nothing extra.
 
-Under *General* you can turn the per-tab usage and the system monitor on or off, toggle automatic Claude resume, and edit the list of programs that reopen on their own.
+Under *General* you can turn the per-tab usage and the system monitor on or off, toggle automatic Claude resume, edit the list of programs that reopen on their own, and pick the language (automatic, English or Spanish). Changing the language applies right away, without closing anything.
 
 ![Hilo with the tab bar hidden](docs/screenshots/en/hidden.png)
 
@@ -85,7 +85,7 @@ Under *General* you can turn the per-tab usage and the system monitor on or off,
 
 ## Updating without restarting
 
-When `hilo.py` changes (a `git pull`, for example), an orange **Actualizar** button appears in the tab bar. Clicking it applies the new version without closing anything: Hilo replaces itself with the new code in the same process and hands over every open terminal, so shells, Claude sessions and running programs keep going. You can also run `hilo --actualizar` from any terminal, or use right click → *Aplicar actualización de Hilo*.
+When `hilo.py` changes (a `git pull`, for example), an orange **Update** button appears in the tab bar. Clicking it applies the new version without closing anything: Hilo replaces itself with the new code in the same process and hands over every open terminal, so shells, Claude sessions and running programs keep going. You can also run `hilo --update` from any terminal, or use right click → *Apply Hilo update*.
 
 Full-screen programs (Claude, vim, less) are asked to redraw themselves right after. If the new version has a syntax error, nothing is applied and you get a message.
 
@@ -113,7 +113,7 @@ It uses the font, palette and scrollback of your default GNOME Terminal profile,
 - Settings: `~/.config/hilo/config.json`. Managed from Preferences; it only stores what differs from the defaults.
 
 ```json
-{ "show_usage": true, "show_system": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
+{ "language": "auto", "show_usage": true, "show_system": true, "autorun_claude": true, "autorun": ["nvim", "vim", "htop"],
   "shortcuts": { "new_tab": ["<Control>t"], "close_tab": ["<Control><Shift>w"] } }
 ```
 

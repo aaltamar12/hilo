@@ -35,7 +35,7 @@ export XDG_CONFIG_HOME="$(mktemp -d)"
 
 If you want to keep the test session across restarts (for example, to test restoring), use a fixed folder instead of `mktemp -d`.
 
-`./hilo.py --fresh` opens without restoring anything. With the development copy open, `./hilo.py --actualizar` (same environment variables) applies your edits without closing it.
+`./hilo.py --fresh` opens without restoring anything. With the development copy open, `./hilo.py --update` (same environment variables) applies your edits without closing it.
 
 To test without any window showing up on your desktop, run it on a virtual display: `Xvfb :97 &` and then `DISPLAY=:97 GDK_BACKEND=x11 ./hilo.py`.
 
@@ -92,7 +92,7 @@ python3 -m py_compile hilo.py
 
 ## Conventions
 
-- Interface text is in Spanish, in plain natural language, using the formal "usted".
+- The interface comes in English and Spanish. In the code, every text is written in Spanish inside `T("…")`, and its English version goes in the `EN` dictionary at the top of `hilo.py`. A new text without its English entry shows up in Spanish for English users. Write both in plain natural language; the Spanish uses the formal "usted".
 - Documentation comes in two versions: English (`README.md`, `CONTRIBUTING.md`) and Spanish (`README.es.md`, `CONTRIBUTING.es.md`). If you change one, update the other.
 - Clear code over clever code. Comments explain why, not what.
 - Don't add dependencies beyond Python, GTK and VTE without discussing it first.
